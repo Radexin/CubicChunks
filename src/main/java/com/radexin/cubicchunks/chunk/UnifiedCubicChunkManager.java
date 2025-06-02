@@ -64,7 +64,7 @@ public class UnifiedCubicChunkManager {
     private int verticalRenderDistance = 4;
     
     public UnifiedCubicChunkManager(ServerLevel level, CubicWorldGenerator worldGenerator, 
-                                  CubeChunkGenerator cubeGenerator, UnifiedCubicChunkStorage storage, 
+                                  UnifiedCubeChunkGenerator cubeGenerator, UnifiedCubicChunkStorage storage, 
                                   Registry<Biome> biomeRegistry) {
         this.level = level;
         this.worldGenerator = worldGenerator;

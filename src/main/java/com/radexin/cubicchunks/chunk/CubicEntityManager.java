@@ -1,6 +1,7 @@
 package com.radexin.cubicchunks.chunk;
 
 import com.radexin.cubicchunks.Config;
+import com.radexin.cubicchunks.world.CubeWorld;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.Entity;
@@ -20,6 +21,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.SpawnGroupData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,12 +37,12 @@ import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 
 /**
- * Enhanced entity management system for cubic chunks.
- * Provides efficient entity tracking, spawning, and culling across 3D space.
+ * Manages entity tracking, spawning, and storage for cubic chunks.
+ * Provides efficient spatial partitioning and entity lifecycle management.
  */
 public class CubicEntityManager {
     private final ServerLevel level;
-    private final CubicChunkManager chunkManager;
+    private final UnifiedCubicChunkManager chunkManager;
     
     // Entity tracking by cube
     private final Map<Long, Set<Entity>> entitiesBycube = new ConcurrentHashMap<>();
@@ -60,7 +65,7 @@ public class CubicEntityManager {
     private final Map<Entity, Long> entityLastUpdate = new ConcurrentHashMap<>();
     private static final long ENTITY_TIMEOUT = 30000; // 30 seconds
     
-    public CubicEntityManager(ServerLevel level, CubicChunkManager chunkManager) {
+    public CubicEntityManager(ServerLevel level, UnifiedCubicChunkManager chunkManager) {
         this.level = level;
         this.chunkManager = chunkManager;
     }
@@ -422,12 +427,9 @@ public class CubicEntityManager {
             entity.setPos(spawnPos.getX() + 0.5, spawnPos.getY(), spawnPos.getZ() + 0.5);
             
             // Finalize spawning
-            if (entity instanceof Monster monster) {
-                monster.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), 
-                    MobSpawnType.NATURAL, null, null);
-            } else if (entity instanceof Animal animal) {
-                animal.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), 
-                    MobSpawnType.NATURAL, null, null);
+            if (entity instanceof Mob mob) {
+                mob.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), 
+                    MobSpawnType.NATURAL, null);
             }
             
             level.addFreshEntity(entity);

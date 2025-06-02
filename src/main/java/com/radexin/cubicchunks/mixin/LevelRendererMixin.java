@@ -17,13 +17,14 @@ import org.spongepowered.asm.mixin.Unique;
 import net.minecraft.client.Camera;
 import java.util.Set;
 import java.util.HashSet;
-import com.radexin.cubicchunks.client.CubicChunkRenderer;
-import com.radexin.cubicchunks.world.CubicChunkManager;
+import com.radexin.cubicchunks.client.UnifiedCubicRenderer;
+import com.radexin.cubicchunks.world.CubicWorldType;
 import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 
 import java.util.Collection;
+import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
 
 /**
  * Mixin to integrate cubic chunk rendering with Minecraft's level renderer.
@@ -39,11 +40,11 @@ public abstract class LevelRendererMixin {
     
     @Shadow private Minecraft minecraft;
     
-    private CubicChunkRenderer cubicChunkRenderer;
+    private UnifiedCubicRenderer cubicChunkRenderer;
     
     @Inject(method = "<init>", at = @At("TAIL"))
-    private void onInit(CallbackInfo ci) {
-        this.cubicChunkRenderer = new CubicChunkRenderer();
+    private void initCubicChunkRenderer(CallbackInfo ci) {
+        this.cubicChunkRenderer = new UnifiedCubicRenderer();
     }
     
     @Inject(method = "setupRender", at = @At("HEAD"))
@@ -98,7 +99,7 @@ public abstract class LevelRendererMixin {
         
         try {
             // Get cubic chunk manager if available
-            CubicChunkManager chunkManager = getCubicChunkManager();
+            UnifiedCubicChunkManager chunkManager = getCubicChunkManager();
             if (chunkManager == null) return;
             
             Vec3 cameraPos = camera.getPosition();
@@ -134,7 +135,7 @@ public abstract class LevelRendererMixin {
      * Gets the cubic chunk manager from the current level.
      * Returns null if not available or not a cubic world.
      */
-    private CubicChunkManager getCubicChunkManager() {
+    private UnifiedCubicChunkManager getCubicChunkManager() {
         if (minecraft.level == null) return null;
         
         // Use the CubicWorldType utility to get the manager
@@ -162,7 +163,7 @@ public abstract class LevelRendererMixin {
             int cubeZ = Math.floorDiv(z, CubeChunk.SIZE);
             
             // Mark the cube for rebuilding
-            CubicChunkManager chunkManager = getCubicChunkManager();
+            UnifiedCubicChunkManager chunkManager = getCubicChunkManager();
             if (chunkManager != null) {
                 CubeChunk cube = chunkManager.getCube(cubeX, cubeY, cubeZ, false);
                 if (cube != null) {
@@ -175,7 +176,7 @@ public abstract class LevelRendererMixin {
     /**
      * Gets visible cubic chunks from the chunk manager within render distance.
      */
-    private Collection<CubeChunk> getVisibleCubesFromManager(CubicChunkManager chunkManager, Vec3 cameraPos, Integer renderDistance, int verticalRenderDistance) {
+    private Collection<CubeChunk> getVisibleCubesFromManager(UnifiedCubicChunkManager chunkManager, Vec3 cameraPos, Integer renderDistance, int verticalRenderDistance) {
         java.util.List<CubeChunk> visibleCubes = new java.util.ArrayList<>();
         
         int centerCubeX = (int) Math.floor(cameraPos.x / CubeChunk.SIZE);

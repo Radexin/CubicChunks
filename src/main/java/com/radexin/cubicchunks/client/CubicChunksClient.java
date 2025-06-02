@@ -17,19 +17,20 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.world.phys.Vec3;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.radexin.cubicchunks.client.UnifiedCubicRenderer;
 
 import java.util.Collection;
 
 public class CubicChunksClient {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static CubeWorld clientCubeWorld;
-    private static CubicChunkRenderer cubeRenderer;
+    private static UnifiedCubicRenderer cubeRenderer;
 
     public static CubeWorld getClientCubeWorld() {
         return clientCubeWorld;
     }
 
-    public static CubicChunkRenderer getCubeRenderer() {
+    public static UnifiedCubicRenderer getCubeRenderer() {
         return cubeRenderer;
     }
 
@@ -41,7 +42,7 @@ public class CubicChunksClient {
         clientCubeWorld = new CubeWorld(new CubeChunkGenerator());
         
         // Initialize cube renderer
-        cubeRenderer = new CubicChunkRenderer();
+        cubeRenderer = new UnifiedCubicRenderer();
         
         // Register client events
         NeoForge.EVENT_BUS.register(CubicChunksClient.class);

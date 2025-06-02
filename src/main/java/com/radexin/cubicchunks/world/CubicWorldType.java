@@ -21,6 +21,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.storage.WorldData;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
+import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
 
 /**
  * Integrates cubic chunks with Minecraft's world type system.
@@ -109,7 +110,7 @@ public class CubicWorldType {
     /**
      * Gets the cubic chunks manager for a level, if it exists.
      */
-    public static CubicChunkManager getCubicChunkManager(Level level) {
+    public static UnifiedCubicChunkManager getCubicChunkManager(Level level) {
         // For now, return null - this would need proper implementation
         // In a full implementation, this would create a manager with proper storage
         return null;

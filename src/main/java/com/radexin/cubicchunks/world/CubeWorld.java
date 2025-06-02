@@ -2,9 +2,12 @@ package com.radexin.cubicchunks.world;
 
 import com.radexin.cubicchunks.chunk.CubeColumn;
 import com.radexin.cubicchunks.chunk.CubeChunk;
+import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
+import com.radexin.cubicchunks.lighting.UnifiedCubicLightEngine;
 import com.radexin.cubicchunks.gen.CubeChunkGenerator;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Collection;
@@ -23,12 +26,12 @@ public class CubeWorld {
     // Map of (x, z) to CubeColumn
     private final Map<Long, CubeColumn> columns = new HashMap<>();
     private final CubeChunkGenerator generator;
-    private final CubicLightEngine lightEngine;
+    private final UnifiedCubicLightEngine lightEngine;
     private final Set<CubeChunk> tickingCubes = new HashSet<>();
 
-    public CubeWorld(CubeChunkGenerator generator) {
+    public CubeWorld(CubeChunkGenerator generator, UnifiedCubicChunkManager chunkManager, Level level) {
         this.generator = generator;
-        this.lightEngine = new CubicLightEngine(this);
+        this.lightEngine = new UnifiedCubicLightEngine(chunkManager, this, level);
     }
 
     /**
@@ -94,8 +97,9 @@ public class CubeWorld {
         BlockState oldState = cube.getBlockState(localX, localY, localZ);
         cube.setBlockState(localX, localY, localZ, newState);
         
-        // Update lighting
-        lightEngine.updateLighting(worldX, worldY, worldZ, newState, oldState);
+        // Update lighting using the unified lighting engine
+        BlockPos pos = new BlockPos(worldX, worldY, worldZ);
+        lightEngine.updateLightingForBlockChange(pos, oldState, newState);
         
         // Add to ticking cubes if it now has content
         if (!cube.isEmpty()) {
@@ -127,18 +131,8 @@ public class CubeWorld {
      * Gets the light level at a position
      */
     public int getLightLevel(int worldX, int worldY, int worldZ) {
-        int cubeX = Math.floorDiv(worldX, CubeChunk.SIZE);
-        int cubeY = Math.floorDiv(worldY, CubeChunk.SIZE);
-        int cubeZ = Math.floorDiv(worldZ, CubeChunk.SIZE);
-        
-        CubeChunk cube = getCube(cubeX, cubeY, cubeZ, false);
-        if (cube == null) return 0;
-        
-        int localX = Math.floorMod(worldX, CubeChunk.SIZE);
-        int localY = Math.floorMod(worldY, CubeChunk.SIZE);
-        int localZ = Math.floorMod(worldZ, CubeChunk.SIZE);
-        
-        return cube.getLightLevel(localX, localY, localZ);
+        BlockPos pos = new BlockPos(worldX, worldY, worldZ);
+        return lightEngine.getLightLevel(pos);
     }
 
     /**
@@ -212,8 +206,10 @@ public class CubeWorld {
         return tag;
     }
 
-    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator, net.minecraft.core.Registry<net.minecraft.world.level.biome.Biome> biomeRegistry) {
-        CubeWorld world = new CubeWorld(generator);
+    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator, 
+                                   UnifiedCubicChunkManager chunkManager, Level level,
+                                   net.minecraft.core.Registry<net.minecraft.world.level.biome.Biome> biomeRegistry) {
+        CubeWorld world = new CubeWorld(generator, chunkManager, level);
         ListTag columnsList = tag.getList("columns", Tag.TAG_COMPOUND);
         for (int i = 0; i < columnsList.size(); i++) {
             CompoundTag columnTag = columnsList.getCompound(i);
@@ -261,7 +257,7 @@ public class CubeWorld {
     /**
      * Gets the lighting engine
      */
-    public CubicLightEngine getLightEngine() {
+    public UnifiedCubicLightEngine getLightEngine() {
         return lightEngine;
     }
 } 
