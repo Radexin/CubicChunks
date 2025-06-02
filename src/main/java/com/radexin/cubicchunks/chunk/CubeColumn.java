@@ -40,33 +40,46 @@ public class CubeColumn {
         cubes.remove(cubeY);
     }
 
+    /**
+     * Loads an existing CubeChunk at the given Y level.
+     */
+    public void loadCube(int cubeY, CubeChunk cube) {
+        cubes.put(cubeY, cube);
+    }
+
     public int getX() { return x; }
     public int getZ() { return z; }
 
     public CompoundTag toNBT() {
         CompoundTag tag = new CompoundTag();
-        tag.putInt("x", x);
-        tag.putInt("z", z);
-        ListTag cubesList = new ListTag();
+        tag.putInt("columnX", x);
+        tag.putInt("columnZ", z);
+        
+        // Save all loaded cubes
+        CompoundTag cubesTag = new CompoundTag();
         for (Map.Entry<Integer, CubeChunk> entry : cubes.entrySet()) {
-            cubesList.add(entry.getValue().toNBT());
+            cubesTag.put("cube_" + entry.getKey(), entry.getValue().toNBT());
         }
-        tag.put("cubes", cubesList);
+        tag.put("cubes", cubesTag);
+        
         return tag;
     }
 
     public static CubeColumn fromNBT(CompoundTag tag) {
-        int x = tag.getInt("x");
-        int z = tag.getInt("z");
-        CubeColumn column = new CubeColumn(x, z);
-        ListTag cubesList = tag.getList("cubes", Tag.TAG_COMPOUND);
-        for (int i = 0; i < cubesList.size(); i++) {
-            CompoundTag cubeTag = cubesList.getCompound(i);
-            CubeChunk cube = CubeChunk.fromNBT(cubeTag);
-            if (cube != null) {
-                column.cubes.put(cube.getCubeY(), cube);
+        int columnX = tag.getInt("columnX");
+        int columnZ = tag.getInt("columnZ");
+        CubeColumn column = new CubeColumn(columnX, columnZ);
+        
+        // Load all cubes
+        CompoundTag cubesTag = tag.getCompound("cubes");
+        for (String key : cubesTag.getAllKeys()) {
+            if (key.startsWith("cube_")) {
+                int cubeY = Integer.parseInt(key.substring(5));
+                CubeChunk cube = CubeChunk.fromNBT(cubesTag.getCompound(key));
+                column.cubes.put(cubeY, cube);
             }
         }
+        
         return column;
     }
 

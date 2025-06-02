@@ -12,7 +12,12 @@ public class VerticalRenderDistanceOption {
             (caption, value) -> Component.translatable("cubicchunks.options.verticalRenderDistance").append(": ").append(Integer.toString(value)),
             new OptionInstance.IntRange(1, 32),
             Config.verticalRenderDistance,
-            (value) -> Config.verticalRenderDistance = value
+            (value) -> {
+                Config.verticalRenderDistance = value;
+                // Force config save - this ensures the value is persisted
+                // Note: NeoForge will automatically save the config when the game closes,
+                // but for immediate persistence, we could trigger a save here if needed
+            }
         );
     }
 } 

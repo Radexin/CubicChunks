@@ -127,6 +127,9 @@ public class CubicChunks
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(CubicChunksClient::onClientSetup);
         }
+
+        // Register payloads on the mod event bus
+        modEventBus.addListener(this::registerPayloads);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event)
@@ -236,8 +239,7 @@ public class CubicChunks
     }
 
     // Register network payloads for cube sync
-    @net.neoforged.bus.api.SubscribeEvent
-    public static void registerPayloads(RegisterPayloadHandlersEvent event) {
+    public void registerPayloads(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(MODID).versioned("1");
         registrar.playBidirectional(
             CubeSyncPayload.TYPE,
@@ -245,25 +247,8 @@ public class CubicChunks
             new DirectionalPayloadHandler<>(
                 (payload, context) -> {
                     // Client receives cube sync from server
-                    CubeWorld clientWorld = com.radexin.cubicchunks.client.CubicChunksClient.getClientCubeWorld();
-                    CubeChunk updated = com.radexin.cubicchunks.chunk.CubeChunk.fromNBT(payload.cubeData());
-                    CubeColumn column = clientWorld.getColumn(updated.getCubeX(), updated.getCubeZ(), true);
-                    // Replace or add the cube in the column
-                    column.getLoadedCubes().removeIf(c -> c.getCubeY() == updated.getCubeY());
-                    // Directly put in the cubes map if accessible, else add to loaded cubes
-                    // (Assume getLoadedCubes returns a collection view of the map values)
-                    // If CubeColumn exposes a put method, use it; otherwise, update the map directly if possible
-                    // For now, just add if not present
-                    if (!column.getLoadedCubes().contains(updated)) {
-                        // This assumes CubeColumn has a method to add a cube; if not, add such a method
-                        // For now, use getCube with createIfMissing=true to ensure it's present
-                        column.getCube(updated.getCubeY(), true);
-                        // Overwrite the cube in the map if possible
-                        // (Assume cubes is a map<Integer, CubeChunk>)
-                        // If not accessible, this is a TODO for CubeColumn API
-                    }
-                    // Log for debug
-                    LOGGER.info("Received CubeSyncPayload on client: {} {} {}", payload.cubeX(), payload.cubeY(), payload.cubeZ());
+                    CubicChunksClient.handleCubeSync(payload.cubeX(), payload.cubeY(), payload.cubeZ(), payload.cubeData());
+                    LOGGER.debug("Received CubeSyncPayload on client: {} {} {}", payload.cubeX(), payload.cubeY(), payload.cubeZ());
                 },
                 (payload, context) -> {
                     // Server receives cube sync (e.g., from client)

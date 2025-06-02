@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.radexin.cubicchunks.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "cubicchunks.refmap.json",
+  "mixins": [
+    "LevelMixin",
+    "ServerLevelMixin",
+    "ChunkMapMixin",
+    "ServerPlayerMixin"
+  ],
+  "client": [
+    "VideoSettingsScreenMixin",
+    "LevelRendererMixin",
+    "ClientLevelMixin"
+  ],
+  "server": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+} 
