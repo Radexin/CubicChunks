@@ -36,12 +36,17 @@ public class Config
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), Config::validateItemName);
 
+    private static final ModConfigSpec.IntValue VERTICAL_RENDER_DISTANCE = BUILDER
+            .comment("Vertical render distance in cubes (number of cubes rendered above and below the player)")
+            .defineInRange("verticalRenderDistance", 8, 1, 32);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     public static boolean logDirtBlock;
     public static int magicNumber;
     public static String magicNumberIntroduction;
     public static Set<Item> items;
+    public static int verticalRenderDistance;
 
     private static boolean validateItemName(final Object obj)
     {
@@ -54,7 +59,7 @@ public class Config
         logDirtBlock = LOG_DIRT_BLOCK.get();
         magicNumber = MAGIC_NUMBER.get();
         magicNumberIntroduction = MAGIC_NUMBER_INTRODUCTION.get();
-
+        verticalRenderDistance = VERTICAL_RENDER_DISTANCE.get();
         // convert the list of strings into a set of items
         items = ITEM_STRINGS.get().stream()
                 .map(itemName -> BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemName)))

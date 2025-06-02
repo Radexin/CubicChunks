@@ -5,6 +5,11 @@ import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.gen.CubeChunkGenerator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Collection;
+import java.util.ArrayList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 
 /**
  * Manages CubeColumns and overall cubic chunks world logic.
@@ -61,5 +66,40 @@ public class CubeWorld {
 
     private long getKey(int x, int z) {
         return ((long)x << 32) | (z & 0xFFFFFFFFL);
+    }
+
+    public CompoundTag toNBT() {
+        CompoundTag tag = new CompoundTag();
+        ListTag columnsList = new ListTag();
+        for (CubeColumn column : columns.values()) {
+            columnsList.add(column.toNBT());
+        }
+        tag.put("columns", columnsList);
+        return tag;
+    }
+
+    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator) {
+        CubeWorld world = new CubeWorld(generator);
+        ListTag columnsList = tag.getList("columns", Tag.TAG_COMPOUND);
+        for (int i = 0; i < columnsList.size(); i++) {
+            CompoundTag columnTag = columnsList.getCompound(i);
+            CubeColumn column = CubeColumn.fromNBT(columnTag);
+            if (column != null) {
+                long key = ((long) column.getX() & 0xFFFFFFFFL) | (((long) column.getZ() & 0xFFFFFFFFL) << 32);
+                world.columns.put(key, column);
+            }
+        }
+        return world;
+    }
+
+    /**
+     * Returns a collection of all loaded CubeChunks in all columns.
+     */
+    public Collection<CubeChunk> getLoadedCubes() {
+        Collection<CubeChunk> cubes = new ArrayList<>();
+        for (CubeColumn column : columns.values()) {
+            cubes.addAll(column.getLoadedCubes());
+        }
+        return cubes;
     }
 } 

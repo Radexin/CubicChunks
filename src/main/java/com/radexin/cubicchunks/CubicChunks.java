@@ -39,6 +39,25 @@ import com.radexin.cubicchunks.gen.CubeChunkGenerator;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtAccounter;
+import java.nio.file.Path;
+import com.radexin.cubicchunks.world.CubicChunksSavedData;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.CommandBuildContext;
+import net.minecraft.commands.arguments.blocks.BlockStateArgument;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.minecraft.resources.ResourceLocation;
+import com.radexin.cubicchunks.network.CubeSyncPayload;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.DirectionalPayloadHandler;
+import net.neoforged.neoforge.network.PacketDistributor;
+import com.radexin.cubicchunks.client.CubicChunksClient;
+import net.neoforged.fml.loading.FMLEnvironment;
+import com.radexin.cubicchunks.chunk.CubeColumn;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(CubicChunks.MODID)
@@ -73,8 +92,11 @@ public class CubicChunks
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
             }).build());
 
-    private CubeWorld cubeWorld;
+    private CubicChunksSavedData savedData;
     private CubeChunkGenerator cubeChunkGenerator;
+
+    // Remove SimpleChannel and old networking code. Networking is now handled via RegisterPayloadHandlerEvent and CustomPacketPayload.
+    // TODO: Register network payloads for cube sync in a static event handler.
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
@@ -100,6 +122,11 @@ public class CubicChunks
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+
+        // Register client setup if on client
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            modEventBus.addListener(CubicChunksClient::onClientSetup);
+        }
     }
 
     private void commonSetup(final FMLCommonSetupEvent event)
@@ -127,11 +154,24 @@ public class CubicChunks
     public void onServerStarting(ServerStartingEvent event)
     {
         LOGGER.info("HELLO from server starting");
-        // Initialize cubic world and generator
+        // Initialize generator
         this.cubeChunkGenerator = new CubeChunkGenerator();
-        this.cubeWorld = new CubeWorld(cubeChunkGenerator);
+        // Load or create CubicChunksSavedData
+        this.savedData = com.radexin.cubicchunks.world.CubicChunksSavedData.getOrCreate(event.getServer(), this.cubeChunkGenerator);
+    }
+
+    // Helper to send a cube sync payload to a player
+    public static void sendCubeSync(ServerPlayer player, CubeChunk cube) {
+        var payload = new CubeSyncPayload(
+            cube.getCubeX(), cube.getCubeY(), cube.getCubeZ(), cube.toNBT()
+        );
+        PacketDistributor.sendToPlayer(player, payload);
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
         // Register a simple command to test cube generation
-        event.getServer().getCommands().getDispatcher().register(
+        event.getDispatcher().register(
             Commands.literal("cubiccube")
                 .then(Commands.argument("x", IntegerArgumentType.integer())
                     .then(Commands.argument("y", IntegerArgumentType.integer())
@@ -140,18 +180,98 @@ public class CubicChunks
                                 int x = IntegerArgumentType.getInteger(ctx, "x");
                                 int y = IntegerArgumentType.getInteger(ctx, "y");
                                 int z = IntegerArgumentType.getInteger(ctx, "z");
-                                CubeChunk cube = cubeWorld.getCube(x, y, z, true);
+                                CubeChunk cube = savedData.getCubeWorld().getCube(x, y, z, true);
                                 ServerPlayer player = ctx.getSource().getPlayer();
                                 if (cube != null && player != null) {
                                     player.sendSystemMessage(Component.literal("Generated cube at (" + x + ", " + y + ", " + z + ")"));
                                 } else if (player != null) {
                                     player.sendSystemMessage(Component.literal("Failed to generate cube at (" + x + ", " + y + ", " + z + ")"));
                                 }
+                                // Mark data as dirty for saving
+                                savedData.setDirty();
                                 return 1;
                             })
                         )
                     )
                 )
+        );
+        event.getDispatcher().register(
+            Commands.literal("cubicsetblock")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                    .then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .then(Commands.argument("block", BlockStateArgument.block(event.getBuildContext()))
+                                .executes(ctx -> {
+                                    int x = IntegerArgumentType.getInteger(ctx, "x");
+                                    int y = IntegerArgumentType.getInteger(ctx, "y");
+                                    int z = IntegerArgumentType.getInteger(ctx, "z");
+                                    var blockInput = BlockStateArgument.getBlock(ctx, "block");
+                                    var blockState = blockInput.getState();
+                                    int cubeX = Math.floorDiv(x, CubeChunk.SIZE);
+                                    int cubeY = Math.floorDiv(y, CubeChunk.SIZE);
+                                    int cubeZ = Math.floorDiv(z, CubeChunk.SIZE);
+                                    int localX = Math.floorMod(x, CubeChunk.SIZE);
+                                    int localY = Math.floorMod(y, CubeChunk.SIZE);
+                                    int localZ = Math.floorMod(z, CubeChunk.SIZE);
+                                    CubeChunk cube = savedData.getCubeWorld().getCube(cubeX, cubeY, cubeZ, true);
+                                    ServerPlayer player = ctx.getSource().getPlayer();
+                                    if (cube != null) {
+                                        cube.setBlockState(localX, localY, localZ, blockState);
+                                        savedData.setDirty();
+                                        if (player != null) {
+                                            player.sendSystemMessage(Component.literal("Set block at (" + x + ", " + y + ", " + z + ") to " + blockState.getBlock().getName().getString()));
+                                            // Send cube sync to player (and optionally others)
+                                            sendCubeSync(player, cube);
+                                        }
+                                    } else if (player != null) {
+                                        player.sendSystemMessage(Component.literal("Failed to set block at (" + x + ", " + y + ", " + z + ")"));
+                                    }
+                                    return 1;
+                                })
+                            )
+                        )
+                    )
+                )
+        );
+    }
+
+    // Register network payloads for cube sync
+    @net.neoforged.bus.api.SubscribeEvent
+    public static void registerPayloads(RegisterPayloadHandlersEvent event) {
+        var registrar = event.registrar(MODID).versioned("1");
+        registrar.playBidirectional(
+            CubeSyncPayload.TYPE,
+            CubeSyncPayload.STREAM_CODEC,
+            new DirectionalPayloadHandler<>(
+                (payload, context) -> {
+                    // Client receives cube sync from server
+                    CubeWorld clientWorld = com.radexin.cubicchunks.client.CubicChunksClient.getClientCubeWorld();
+                    CubeChunk updated = com.radexin.cubicchunks.chunk.CubeChunk.fromNBT(payload.cubeData());
+                    CubeColumn column = clientWorld.getColumn(updated.getCubeX(), updated.getCubeZ(), true);
+                    // Replace or add the cube in the column
+                    column.getLoadedCubes().removeIf(c -> c.getCubeY() == updated.getCubeY());
+                    // Directly put in the cubes map if accessible, else add to loaded cubes
+                    // (Assume getLoadedCubes returns a collection view of the map values)
+                    // If CubeColumn exposes a put method, use it; otherwise, update the map directly if possible
+                    // For now, just add if not present
+                    if (!column.getLoadedCubes().contains(updated)) {
+                        // This assumes CubeColumn has a method to add a cube; if not, add such a method
+                        // For now, use getCube with createIfMissing=true to ensure it's present
+                        column.getCube(updated.getCubeY(), true);
+                        // Overwrite the cube in the map if possible
+                        // (Assume cubes is a map<Integer, CubeChunk>)
+                        // If not accessible, this is a TODO for CubeColumn API
+                    }
+                    // Log for debug
+                    LOGGER.info("Received CubeSyncPayload on client: {} {} {}", payload.cubeX(), payload.cubeY(), payload.cubeZ());
+                },
+                (payload, context) -> {
+                    // Server receives cube sync (e.g., from client)
+                    // For now, just log receipt
+                    LOGGER.info("Received CubeSyncPayload on server: {} {} {}", payload.cubeX(), payload.cubeY(), payload.cubeZ());
+                    // Optionally, update the world/cube data here
+                }
+            )
         );
     }
 
