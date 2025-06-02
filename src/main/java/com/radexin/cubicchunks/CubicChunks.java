@@ -3,6 +3,7 @@ package com.radexin.cubicchunks;
 import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -33,6 +34,11 @@ import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
+import com.radexin.cubicchunks.world.CubeWorld;
+import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.chunk.CubeChunk;
+import net.minecraft.commands.Commands;
+import net.minecraft.server.level.ServerPlayer;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(CubicChunks.MODID)
@@ -66,6 +72,9 @@ public class CubicChunks
             .displayItems((parameters, output) -> {
                 output.accept(EXAMPLE_ITEM.get()); // Add the example item to the tab. For your own tabs, this method is preferred over the event
             }).build());
+
+    private CubeWorld cubeWorld;
+    private CubeChunkGenerator cubeChunkGenerator;
 
     // The constructor for the mod class is the first code that is run when your mod is loaded.
     // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
@@ -117,8 +126,33 @@ public class CubicChunks
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event)
     {
-        // Do something when the server starts
         LOGGER.info("HELLO from server starting");
+        // Initialize cubic world and generator
+        this.cubeChunkGenerator = new CubeChunkGenerator();
+        this.cubeWorld = new CubeWorld(cubeChunkGenerator);
+        // Register a simple command to test cube generation
+        event.getServer().getCommands().getDispatcher().register(
+            Commands.literal("cubiccube")
+                .then(Commands.argument("x", IntegerArgumentType.integer())
+                    .then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer())
+                            .executes(ctx -> {
+                                int x = IntegerArgumentType.getInteger(ctx, "x");
+                                int y = IntegerArgumentType.getInteger(ctx, "y");
+                                int z = IntegerArgumentType.getInteger(ctx, "z");
+                                CubeChunk cube = cubeWorld.getCube(x, y, z, true);
+                                ServerPlayer player = ctx.getSource().getPlayer();
+                                if (cube != null && player != null) {
+                                    player.sendSystemMessage(Component.literal("Generated cube at (" + x + ", " + y + ", " + z + ")"));
+                                } else if (player != null) {
+                                    player.sendSystemMessage(Component.literal("Failed to generate cube at (" + x + ", " + y + ", " + z + ")"));
+                                }
+                                return 1;
+                            })
+                        )
+                    )
+                )
+        );
     }
 
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
