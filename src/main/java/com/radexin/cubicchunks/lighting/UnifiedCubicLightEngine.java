@@ -2,12 +2,12 @@ package com.radexin.cubicchunks.lighting;
 
 import com.radexin.cubicchunks.Config;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.chunk.CubicChunkManager;
+import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
+import com.radexin.cubicchunks.world.CubeWorld;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.lighting.LightEngine;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -15,16 +15,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Enhanced 3D lighting engine with full volumetric light propagation.
- * Features adaptive algorithms, efficient caching, and multi-threaded processing.
+ * Unified high-performance 3D lighting engine for cubic chunks.
+ * Combines advanced algorithms, efficient caching, multi-threaded processing,
+ * and cross-cube light propagation from multiple implementations.
  */
-public class Enhanced3DLightEngine {
+public class UnifiedCubicLightEngine {
     private static final int MAX_LIGHT_LEVEL = 15;
     private static final int LIGHT_PROPAGATION_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private static final int MAX_PROPAGATION_DISTANCE = 16;
     private static final int BATCH_SIZE = 512;
+    private static final long CACHE_EXPIRE_TIME = 5000; // 5 seconds
     
-    private final CubicChunkManager chunkManager;
+    // Core components
+    private final UnifiedCubicChunkManager chunkManager;
+    private final CubeWorld cubeWorld;
     private final Level level;
     
     // Thread management
@@ -40,6 +44,10 @@ public class Enhanced3DLightEngine {
     private final Map<BlockPos, CachedLightValue> lightCache = new ConcurrentHashMap<>();
     private final Map<Long, CubeLight> cubeLightCache = new ConcurrentHashMap<>();
     
+    // Simple BFS queues for immediate processing
+    private final Queue<LightNode> lightQueue = new ArrayDeque<>();
+    private final Queue<LightNode> removalQueue = new ArrayDeque<>();
+    
     // Performance tracking
     private final AtomicLong lightUpdatesProcessed = new AtomicLong(0);
     private final AtomicLong cacheHits = new AtomicLong(0);
@@ -51,8 +59,9 @@ public class Enhanced3DLightEngine {
     private final int cacheSize = Config.lightCacheSize;
     private final boolean enableSpatialOptimization = true;
     
-    public Enhanced3DLightEngine(CubicChunkManager chunkManager, Level level) {
+    public UnifiedCubicLightEngine(UnifiedCubicChunkManager chunkManager, CubeWorld cubeWorld, Level level) {
         this.chunkManager = chunkManager;
+        this.cubeWorld = cubeWorld;
         this.level = level;
         
         // Start maintenance tasks
@@ -68,6 +77,8 @@ public class Enhanced3DLightEngine {
             long start = System.nanoTime();
             
             try {
+                activePropagations.incrementAndGet();
+                
                 // Initialize sky light
                 initializeCubeSkyLight(cube);
                 
@@ -83,8 +94,9 @@ public class Enhanced3DLightEngine {
                 cube.setDirty(true);
                 
             } finally {
+                activePropagations.decrementAndGet();
                 long duration = System.nanoTime() - start;
-                // Log performance if needed
+                // Performance logging could go here
             }
         }, lightingExecutor);
     }
@@ -99,13 +111,19 @@ public class Enhanced3DLightEngine {
         
         processingPositions.add(pos);
         
-        CompletableFuture.runAsync(() -> {
-            try {
-                updateLightingAtPosition(pos, oldState, newState);
-            } finally {
-                processingPositions.remove(pos);
-            }
-        }, lightingExecutor);
+        if (enableBatchedUpdates) {
+            // Queue for batched processing
+            queueLightingUpdate(pos, oldState, newState);
+        } else {
+            // Process immediately
+            CompletableFuture.runAsync(() -> {
+                try {
+                    updateLightingAtPosition(pos, oldState, newState);
+                } finally {
+                    processingPositions.remove(pos);
+                }
+            }, lightingExecutor);
+        }
     }
     
     /**
@@ -161,7 +179,7 @@ public class Enhanced3DLightEngine {
     }
     
     /**
-     * Processes all pending light updates in batches.
+     * Processes all pending light updates.
      */
     public void processPendingUpdates() {
         if (enableBatchedUpdates) {
@@ -170,6 +188,8 @@ public class Enhanced3DLightEngine {
             processImmediateUpdates();
         }
     }
+    
+    // Private implementation methods
     
     private void initializeCubeSkyLight(CubeChunk cube) {
         int cubeY = cube.getCubeY();
@@ -196,7 +216,7 @@ public class Enhanced3DLightEngine {
                     if (state.isAir()) {
                         cube.setSkyLight(x, y, z, (byte) currentLight);
                     } else {
-                        int opacity = state.getLightBlock(level, cube.getWorldPos(x, y, z));
+                        int opacity = getOpacity(state, cube.getWorldPos(x, y, z), LightType.SKY);
                         currentLight = Math.max(0, currentLight - Math.max(1, opacity));
                         cube.setSkyLight(x, y, z, (byte) currentLight);
                     }
@@ -206,15 +226,11 @@ public class Enhanced3DLightEngine {
     }
     
     private void propagateSkyLightFromAbove(CubeChunk cube) {
-        int cubeX = cube.getCubeX();
-        int cubeY = cube.getCubeY();
-        int cubeZ = cube.getCubeZ();
-        
         // Get cube above
-        CubeChunk aboveCube = chunkManager.getCube(cubeX, cubeY + 1, cubeZ);
+        CubeChunk aboveCube = chunkManager.getCube(cube.getCubeX(), cube.getCubeY() + 1, cube.getCubeZ(), false);
         if (aboveCube == null) return;
         
-        // Copy light from bottom of above cube to top of this cube
+        // Propagate sky light from above cube
         for (int x = 0; x < CubeChunk.SIZE; x++) {
             for (int z = 0; z < CubeChunk.SIZE; z++) {
                 int lightFromAbove = aboveCube.getSkyLight(x, 0, z);
@@ -232,7 +248,7 @@ public class Enhanced3DLightEngine {
             if (state.isAir()) {
                 cube.setSkyLight(x, y, z, (byte) currentLight);
             } else {
-                int opacity = state.getLightBlock(level, cube.getWorldPos(x, y, z));
+                int opacity = getOpacity(state, cube.getWorldPos(x, y, z), LightType.SKY);
                 currentLight = Math.max(0, currentLight - Math.max(1, opacity));
                 cube.setSkyLight(x, y, z, (byte) currentLight);
             }
@@ -240,43 +256,34 @@ public class Enhanced3DLightEngine {
     }
     
     private void initializeCubeBlockLight(CubeChunk cube) {
-        // First pass: set light emission
-        List<BlockPos> lightSources = new ArrayList<>();
-        
         for (int x = 0; x < CubeChunk.SIZE; x++) {
             for (int y = 0; y < CubeChunk.SIZE; y++) {
                 for (int z = 0; z < CubeChunk.SIZE; z++) {
                     BlockState state = cube.getBlockState(x, y, z);
                     int emission = state.getLightEmission();
                     
-                    cube.setBlockLight(x, y, z, (byte) emission);
-                    
                     if (emission > 0) {
-                        lightSources.add(cube.getWorldPos(x, y, z));
+                        cube.setBlockLight(x, y, z, (byte) emission);
+                        // Queue for propagation
+                        BlockPos worldPos = cube.getWorldPos(x, y, z);
+                        queueLightUpdate(worldPos, emission, LightType.BLOCK, UpdatePriority.IMMEDIATE);
                     }
                 }
             }
         }
-        
-        // Second pass: propagate from light sources
-        for (BlockPos source : lightSources) {
-            propagateBlockLightFromSource(source, cube.getBlockLight(
-                source.getX() & 15, source.getY() & 15, source.getZ() & 15));
-        }
     }
     
     private void propagateWithNeighbors(CubeChunk cube) {
-        int cubeX = cube.getCubeX();
-        int cubeY = cube.getCubeY();
-        int cubeZ = cube.getCubeZ();
-        
-        // Check all 6 neighbors
+        // Propagate light to/from all 6 neighboring cubes
         for (Direction direction : Direction.values()) {
-            int neighborX = cubeX + direction.getStepX();
-            int neighborY = cubeY + direction.getStepY();
-            int neighborZ = cubeZ + direction.getStepZ();
+            int[] offset = getDirectionOffset(direction);
+            CubeChunk neighbor = chunkManager.getCube(
+                cube.getCubeX() + offset[0],
+                cube.getCubeY() + offset[1],
+                cube.getCubeZ() + offset[2],
+                false
+            );
             
-            CubeChunk neighbor = chunkManager.getCube(neighborX, neighborY, neighborZ);
             if (neighbor != null) {
                 propagateLightBetweenCubes(cube, neighbor, direction);
             }
@@ -284,8 +291,6 @@ public class Enhanced3DLightEngine {
     }
     
     private void propagateLightBetweenCubes(CubeChunk fromCube, CubeChunk toCube, Direction direction) {
-        Direction opposite = direction.getOpposite();
-        
         // Propagate both sky and block light
         propagateLightAcrossBoundary(fromCube, toCube, direction, LightType.SKY);
         propagateLightAcrossBoundary(fromCube, toCube, direction, LightType.BLOCK);
@@ -293,36 +298,36 @@ public class Enhanced3DLightEngine {
     
     private void propagateLightAcrossBoundary(CubeChunk fromCube, CubeChunk toCube, 
                                             Direction direction, LightType lightType) {
-        // Get boundary coordinates for both cubes
+        // Get the face coordinates for light propagation
+        int[] fromFace = getBoundaryFaceCoords(direction, true);
+        int[] toFace = getBoundaryFaceCoords(direction, false);
+        
         for (int u = 0; u < CubeChunk.SIZE; u++) {
             for (int v = 0; v < CubeChunk.SIZE; v++) {
-                int[] fromCoords = getBoundaryCoords(u, v, direction, true);
-                int[] toCoords = getBoundaryCoords(u, v, direction, false);
+                int[] fromCoords = mapFaceCoords(fromFace, u, v, direction);
+                int[] toCoords = mapFaceCoords(toFace, u, v, direction);
                 
                 int fromLight = getLightValue(fromCube, fromCoords[0], fromCoords[1], fromCoords[2], lightType);
                 int toLight = getLightValue(toCube, toCoords[0], toCoords[1], toCoords[2], lightType);
                 
-                // Propagate if there's a light difference
-                if (fromLight > toLight + 1) {
-                    BlockPos toPos = toCube.getWorldPos(toCoords[0], toCoords[1], toCoords[2]);
-                    BlockState toState = toCube.getBlockState(toCoords[0], toCoords[1], toCoords[2]);
-                    
-                    int opacity = getOpacity(toState, toPos, lightType);
-                    int newLight = Math.max(0, fromLight - Math.max(1, opacity));
-                    
-                    if (newLight > toLight) {
-                        setLightValue(toCube, toCoords[0], toCoords[1], toCoords[2], lightType, newLight);
-                        
-                        // Queue for further propagation
-                        queueLightUpdate(toPos, newLight, lightType, UpdatePriority.PROPAGATION);
-                    }
+                // Calculate opacity
+                BlockState toState = toCube.getBlockState(toCoords[0], toCoords[1], toCoords[2]);
+                int opacity = getOpacity(toState, toCube.getWorldPos(toCoords[0], toCoords[1], toCoords[2]), lightType);
+                
+                int newLight = Math.max(0, fromLight - Math.max(1, opacity));
+                
+                if (newLight > toLight) {
+                    setLightValue(toCube, toCoords[0], toCoords[1], toCoords[2], lightType, newLight);
+                    // Queue for further propagation
+                    BlockPos worldPos = toCube.getWorldPos(toCoords[0], toCoords[1], toCoords[2]);
+                    queueLightUpdate(worldPos, newLight, lightType, UpdatePriority.PROPAGATION);
                 }
             }
         }
     }
     
     private void updateLightingAtPosition(BlockPos pos, BlockState oldState, BlockState newState) {
-        // Handle emission changes
+        // Handle block light emission changes
         int oldEmission = oldState.getLightEmission();
         int newEmission = newState.getLightEmission();
         
@@ -330,7 +335,7 @@ public class Enhanced3DLightEngine {
             updateBlockLightEmission(pos, oldEmission, newEmission);
         }
         
-        // Handle opacity changes
+        // Handle sky light opacity changes
         int oldOpacity = getOpacity(oldState, pos, LightType.SKY);
         int newOpacity = getOpacity(newState, pos, LightType.SKY);
         
@@ -338,8 +343,9 @@ public class Enhanced3DLightEngine {
             updateSkyLightOpacity(pos, oldOpacity, newOpacity);
         }
         
-        // Invalidate cache for this position and neighbors
+        // Invalidate cache
         invalidateLightCache(pos);
+        lightUpdatesProcessed.incrementAndGet();
     }
     
     private void updateBlockLightEmission(BlockPos pos, int oldEmission, int newEmission) {
@@ -350,182 +356,174 @@ public class Enhanced3DLightEngine {
         int localY = pos.getY() & 15;
         int localZ = pos.getZ() & 15;
         
-        if (newEmission > oldEmission) {
-            // Increasing light - propagate outward
+        if (oldEmission > 0) {
+            // Remove old light
+            removeLightBFS(pos.getX(), pos.getY(), pos.getZ(), oldEmission, LightType.BLOCK);
+        }
+        
+        if (newEmission > 0) {
+            // Add new light
             cube.setBlockLight(localX, localY, localZ, (byte) newEmission);
-            propagateBlockLightFromSource(pos, newEmission);
-        } else if (newEmission < oldEmission) {
-            // Decreasing light - remove old light and recalculate
-            cube.setBlockLight(localX, localY, localZ, (byte) newEmission);
-            removeLightAndRecalculate(pos, oldEmission, LightType.BLOCK);
+            propagateLightBFS(pos.getX(), pos.getY(), pos.getZ(), newEmission, LightType.BLOCK);
         }
     }
     
     private void updateSkyLightOpacity(BlockPos pos, int oldOpacity, int newOpacity) {
-        if (oldOpacity != newOpacity) {
-            // Recalculate sky light column
+        if (newOpacity > oldOpacity) {
+            // Block became more opaque - remove sky light
+            recalculateSkyLightColumn(pos);
+        } else if (newOpacity < oldOpacity) {
+            // Block became less opaque - propagate sky light
             recalculateSkyLightColumn(pos);
         }
     }
     
-    private void propagateBlockLightFromSource(BlockPos source, int lightLevel) {
-        if (lightLevel <= 0) return;
+    private void propagateLightBFS(int startX, int startY, int startZ, int lightLevel, LightType lightType) {
+        lightQueue.clear();
+        lightQueue.offer(new LightNode(new BlockPos(startX, startY, startZ), lightLevel));
         
-        Queue<LightNode> propagationQueue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
-        
-        propagationQueue.offer(new LightNode(source, lightLevel));
-        visited.add(source);
-        
-        while (!propagationQueue.isEmpty()) {
-            LightNode node = propagationQueue.poll();
+        while (!lightQueue.isEmpty()) {
+            LightNode node = lightQueue.poll();
             
-            for (Direction direction : Direction.values()) {
-                BlockPos neighborPos = node.pos.relative(direction);
+            // Check all 6 neighbors
+            for (Direction dir : Direction.values()) {
+                BlockPos newPos = node.pos.relative(dir);
                 
-                if (visited.contains(neighborPos)) continue;
-                visited.add(neighborPos);
+                if (node.lightLevel <= 1) continue; // No more light to propagate
                 
-                CubeChunk neighborCube = getCubeForPosition(neighborPos);
-                if (neighborCube == null) continue;
+                CubeChunk cube = getCubeForPosition(newPos);
+                if (cube == null) continue;
                 
-                int localX = neighborPos.getX() & 15;
-                int localY = neighborPos.getY() & 15;
-                int localZ = neighborPos.getZ() & 15;
+                int localX = newPos.getX() & 15;
+                int localY = newPos.getY() & 15;
+                int localZ = newPos.getZ() & 15;
                 
-                BlockState neighborState = neighborCube.getBlockState(localX, localY, localZ);
-                int opacity = Math.max(1, neighborState.getLightBlock(level, neighborPos));
-                int newLight = Math.max(0, node.lightLevel - opacity);
-                int currentLight = neighborCube.getBlockLight(localX, localY, localZ);
+                BlockState blockState = cube.getBlockState(localX, localY, localZ);
+                int opacity = getOpacity(blockState, newPos, lightType);
                 
-                if (newLight > currentLight) {
-                    neighborCube.setBlockLight(localX, localY, localZ, (byte) newLight);
-                    
-                    if (newLight > 1) {
-                        propagationQueue.offer(new LightNode(neighborPos, newLight));
-                    }
+                if (opacity >= 15) continue; // Opaque block
+                
+                int newLightLevel = Math.max(0, node.lightLevel - Math.max(1, opacity));
+                if (newLightLevel <= 0) continue;
+                
+                int currentLight = getLightValue(cube, localX, localY, localZ, lightType);
+                
+                // Only update if new light is brighter
+                if (newLightLevel > currentLight) {
+                    setLightValue(cube, localX, localY, localZ, lightType, newLightLevel);
+                    lightQueue.offer(new LightNode(newPos, newLightLevel));
                 }
             }
         }
     }
     
-    private void removeLightAndRecalculate(BlockPos pos, int oldLightLevel, LightType lightType) {
-        // Flood-fill removal algorithm
-        Queue<LightNode> removalQueue = new ArrayDeque<>();
-        Queue<LightNode> recalcQueue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
+    private void removeLightBFS(int startX, int startY, int startZ, int lightLevel, LightType lightType) {
+        removalQueue.clear();
+        lightQueue.clear();
         
-        removalQueue.offer(new LightNode(pos, oldLightLevel));
-        visited.add(pos);
+        removalQueue.offer(new LightNode(new BlockPos(startX, startY, startZ), lightLevel));
         
-        // Remove old light
+        // First pass: remove light
         while (!removalQueue.isEmpty()) {
             LightNode node = removalQueue.poll();
             
-            for (Direction direction : Direction.values()) {
-                BlockPos neighborPos = node.pos.relative(direction);
+            for (Direction dir : Direction.values()) {
+                BlockPos newPos = node.pos.relative(dir);
                 
-                if (visited.contains(neighborPos)) continue;
-                visited.add(neighborPos);
+                CubeChunk cube = getCubeForPosition(newPos);
+                if (cube == null) continue;
                 
-                CubeChunk neighborCube = getCubeForPosition(neighborPos);
-                if (neighborCube == null) continue;
+                int localX = newPos.getX() & 15;
+                int localY = newPos.getY() & 15;
+                int localZ = newPos.getZ() & 15;
                 
-                int localX = neighborPos.getX() & 15;
-                int localY = neighborPos.getY() & 15;
-                int localZ = neighborPos.getZ() & 15;
-                
-                int neighborLight = getLightValue(neighborCube, localX, localY, localZ, lightType);
+                int neighborLight = getLightValue(cube, localX, localY, localZ, lightType);
                 
                 if (neighborLight != 0 && neighborLight < node.lightLevel) {
-                    setLightValue(neighborCube, localX, localY, localZ, lightType, 0);
-                    removalQueue.offer(new LightNode(neighborPos, neighborLight));
+                    setLightValue(cube, localX, localY, localZ, lightType, 0);
+                    removalQueue.offer(new LightNode(newPos, neighborLight));
                 } else if (neighborLight >= node.lightLevel) {
-                    recalcQueue.offer(new LightNode(neighborPos, neighborLight));
+                    lightQueue.offer(new LightNode(newPos, neighborLight));
                 }
             }
         }
         
-        // Recalculate from remaining sources
-        while (!recalcQueue.isEmpty()) {
-            LightNode node = recalcQueue.poll();
-            propagateLight(node.pos, node.lightLevel, lightType);
+        // Second pass: re-propagate remaining light
+        while (!lightQueue.isEmpty()) {
+            LightNode node = lightQueue.poll();
+            propagateLightBFS(node.pos.getX(), node.pos.getY(), node.pos.getZ(), node.lightLevel, lightType);
         }
     }
     
     private void recalculateSkyLightColumn(BlockPos pos) {
+        // Recalculate sky light for the entire column
         int worldX = pos.getX();
         int worldZ = pos.getZ();
         
-        // Find the highest cube that contains this column
-        int topY = level.getMaxBuildHeight();
-        int topCubeY = Math.floorDiv(topY, CubeChunk.SIZE);
-        
-        // Start from top and propagate down
-        int currentLight = MAX_LIGHT_LEVEL;
-        
-        for (int cubeY = topCubeY; cubeY >= level.getMinBuildHeight() / CubeChunk.SIZE; cubeY--) {
-            CubeChunk cube = chunkManager.getCube(
-                Math.floorDiv(worldX, CubeChunk.SIZE),
-                cubeY,
-                Math.floorDiv(worldZ, CubeChunk.SIZE)
-            );
-            
+        // Start from top of world and work down
+        for (int y = level.getMaxBuildHeight() - 1; y >= level.getMinBuildHeight(); y--) {
+            BlockPos columnPos = new BlockPos(worldX, y, worldZ);
+            CubeChunk cube = getCubeForPosition(columnPos);
             if (cube == null) continue;
             
             int localX = worldX & 15;
+            int localY = y & 15;
             int localZ = worldZ & 15;
             
-            for (int localY = CubeChunk.SIZE - 1; localY >= 0; localY--) {
-                int worldY = cubeY * CubeChunk.SIZE + localY;
-                if (worldY > topY) continue;
-                
-                BlockState state = cube.getBlockState(localX, localY, localZ);
-                
-                if (state.isAir()) {
-                    cube.setSkyLight(localX, localY, localZ, (byte) currentLight);
-                } else {
-                    int opacity = state.getLightBlock(level, new BlockPos(worldX, worldY, worldZ));
-                    currentLight = Math.max(0, currentLight - Math.max(1, opacity));
-                    cube.setSkyLight(localX, localY, localZ, (byte) currentLight);
-                }
-            }
+            BlockState state = cube.getBlockState(localX, localY, localZ);
+            
+            // Calculate sky light based on column above
+            int lightFromAbove = y < level.getMaxBuildHeight() - 1 ? 
+                getSkyLight(new BlockPos(worldX, y + 1, worldZ)) : MAX_LIGHT_LEVEL;
+            
+            int opacity = getOpacity(state, columnPos, LightType.SKY);
+            int newLight = state.isAir() ? lightFromAbove : Math.max(0, lightFromAbove - Math.max(1, opacity));
+            
+            cube.setSkyLight(localX, localY, localZ, (byte) newLight);
         }
     }
     
-    private void propagateLight(BlockPos pos, int lightLevel, LightType lightType) {
-        if (lightType == LightType.BLOCK) {
-            propagateBlockLightFromSource(pos, lightLevel);
-        } else {
-            // Sky light propagation is more complex and column-based
-            recalculateSkyLightColumn(pos);
+    private void queueLightingUpdate(BlockPos pos, BlockState oldState, BlockState newState) {
+        // Queue for batched processing
+        int oldEmission = oldState.getLightEmission();
+        int newEmission = newState.getLightEmission();
+        
+        if (oldEmission != newEmission) {
+            queueLightUpdate(pos, newEmission, LightType.BLOCK, UpdatePriority.HIGH);
+        }
+        
+        int oldOpacity = getOpacity(oldState, pos, LightType.SKY);
+        int newOpacity = getOpacity(newState, pos, LightType.SKY);
+        
+        if (oldOpacity != newOpacity) {
+            queueLightUpdate(pos, 0, LightType.SKY, UpdatePriority.HIGH);
         }
     }
     
     private void processBatchedUpdates() {
-        processBatchedQueue(skyLightQueue, LightType.SKY);
-        processBatchedQueue(blockLightQueue, LightType.BLOCK);
-    }
-    
-    private void processBatchedQueue(PriorityBlockingQueue<LightUpdate> queue, LightType lightType) {
-        List<LightUpdate> batch = new ArrayList<>();
-        queue.drainTo(batch, BATCH_SIZE);
+        // Process sky light updates
+        int processed = 0;
+        while (!skyLightQueue.isEmpty() && processed < BATCH_SIZE / 2) {
+            LightUpdate update = skyLightQueue.poll();
+            if (update != null) {
+                processLightUpdate(update, LightType.SKY);
+                processed++;
+            }
+        }
         
-        if (!batch.isEmpty()) {
-            CompletableFuture.runAsync(() -> {
-                activePropagations.incrementAndGet();
-                try {
-                    for (LightUpdate update : batch) {
-                        processLightUpdate(update, lightType);
-                    }
-                } finally {
-                    activePropagations.decrementAndGet();
-                }
-            }, lightingExecutor);
+        // Process block light updates
+        processed = 0;
+        while (!blockLightQueue.isEmpty() && processed < BATCH_SIZE / 2) {
+            LightUpdate update = blockLightQueue.poll();
+            if (update != null) {
+                processLightUpdate(update, LightType.BLOCK);
+                processed++;
+            }
         }
     }
     
     private void processImmediateUpdates() {
+        // Process all pending updates immediately
         while (!skyLightQueue.isEmpty()) {
             LightUpdate update = skyLightQueue.poll();
             if (update != null) {
@@ -542,56 +540,45 @@ public class Enhanced3DLightEngine {
     }
     
     private void processLightUpdate(LightUpdate update, LightType lightType) {
-        lightUpdatesProcessed.incrementAndGet();
-        propagateLight(update.pos, update.lightLevel, lightType);
+        processingPositions.remove(update.pos);
+        
+        if (lightType == LightType.BLOCK) {
+            propagateLightBFS(update.pos.getX(), update.pos.getY(), update.pos.getZ(), update.lightLevel, lightType);
+        } else {
+            recalculateSkyLightColumn(update.pos);
+        }
     }
     
     private void performMaintenance() {
         // Clean up expired cache entries
         cleanupLightCache();
-        
-        // Clean up cube light cache
         cleanupCubeLightCache();
         
-        // Log performance statistics if enabled
-        if (Config.enablePerformanceMetrics) {
+        // Log performance stats if needed
+        if (System.currentTimeMillis() % 30000 == 0) { // Every 30 seconds
             logPerformanceStats();
         }
     }
     
     private void cleanupLightCache() {
-        if (lightCache.size() > cacheSize * 1.2) {
-            long currentTime = System.currentTimeMillis();
-            lightCache.entrySet().removeIf(entry -> entry.getValue().isExpired(currentTime));
-        }
+        long currentTime = System.currentTimeMillis();
+        lightCache.entrySet().removeIf(entry -> entry.getValue().isExpired(currentTime));
     }
     
     private void cleanupCubeLightCache() {
-        if (cubeLightCache.size() > 256) {
-            long currentTime = System.currentTimeMillis();
-            cubeLightCache.entrySet().removeIf(entry -> 
-                currentTime - entry.getValue().lastAccess > 300000); // 5 minutes
+        long currentTime = System.currentTimeMillis();
+        if (cubeLightCache.size() > cacheSize * 2) {
+            cubeLightCache.clear(); // Simple cleanup for now
         }
     }
     
     private void logPerformanceStats() {
-        long processed = lightUpdatesProcessed.get();
-        long hits = cacheHits.get();
-        long misses = cacheMisses.get();
-        int active = activePropagations.get();
+        long total = cacheHits.get() + cacheMisses.get();
+        double hitRate = total > 0 ? (double) cacheHits.get() / total : 0.0;
         
-        // Reset counters
-        lightUpdatesProcessed.set(0);
-        cacheHits.set(0);
-        cacheMisses.set(0);
-        
-        // Log statistics (implementation depends on logging framework)
-        System.out.println(String.format(
-            "Light Engine Stats: Updates=%d, Cache Hit Rate=%.2f%%, Active=%d",
-            processed, 
-            hits + misses > 0 ? (double) hits / (hits + misses) * 100 : 0,
-            active
-        ));
+        // Log stats (could use logger here)
+        System.out.println(String.format("Light Engine Stats: Updates=%d, Cache Hit Rate=%.2f%%, Active=%d",
+            lightUpdatesProcessed.get(), hitRate * 100, activePropagations.get()));
     }
     
     private void queueLightUpdate(BlockPos pos, int lightLevel, LightType lightType, UpdatePriority priority) {
@@ -618,9 +605,9 @@ public class Enhanced3DLightEngine {
     private void invalidateLightCache(BlockPos pos) {
         lightCache.remove(pos);
         
-        // Also invalidate neighboring positions
-        for (Direction direction : Direction.values()) {
-            lightCache.remove(pos.relative(direction));
+        // Also invalidate nearby positions
+        for (Direction dir : Direction.values()) {
+            lightCache.remove(pos.relative(dir));
         }
     }
     
@@ -628,16 +615,37 @@ public class Enhanced3DLightEngine {
         int cubeX = Math.floorDiv(pos.getX(), CubeChunk.SIZE);
         int cubeY = Math.floorDiv(pos.getY(), CubeChunk.SIZE);
         int cubeZ = Math.floorDiv(pos.getZ(), CubeChunk.SIZE);
-        return chunkManager.getCube(cubeX, cubeY, cubeZ);
+        
+        return chunkManager.getCube(cubeX, cubeY, cubeZ, false);
     }
     
-    private int[] getBoundaryCoords(int u, int v, Direction direction, boolean isSource) {
-        int coord = isSource ? (CubeChunk.SIZE - 1) : 0;
-        
+    private int[] getDirectionOffset(Direction direction) {
         return switch (direction) {
-            case EAST, WEST -> new int[]{coord, u, v};
-            case UP, DOWN -> new int[]{u, coord, v};
-            case NORTH, SOUTH -> new int[]{u, v, coord};
+            case UP -> new int[]{0, 1, 0};
+            case DOWN -> new int[]{0, -1, 0};
+            case NORTH -> new int[]{0, 0, -1};
+            case SOUTH -> new int[]{0, 0, 1};
+            case WEST -> new int[]{-1, 0, 0};
+            case EAST -> new int[]{1, 0, 0};
+        };
+    }
+    
+    private int[] getBoundaryFaceCoords(Direction direction, boolean isSource) {
+        return switch (direction) {
+            case UP -> new int[]{0, isSource ? CubeChunk.SIZE - 1 : 0, 0};
+            case DOWN -> new int[]{0, isSource ? 0 : CubeChunk.SIZE - 1, 0};
+            case NORTH -> new int[]{0, 0, isSource ? 0 : CubeChunk.SIZE - 1};
+            case SOUTH -> new int[]{0, 0, isSource ? CubeChunk.SIZE - 1 : 0};
+            case WEST -> new int[]{isSource ? 0 : CubeChunk.SIZE - 1, 0, 0};
+            case EAST -> new int[]{isSource ? CubeChunk.SIZE - 1 : 0, 0, 0};
+        };
+    }
+    
+    private int[] mapFaceCoords(int[] faceBase, int u, int v, Direction direction) {
+        return switch (direction) {
+            case UP, DOWN -> new int[]{faceBase[0] + u, faceBase[1], faceBase[2] + v};
+            case NORTH, SOUTH -> new int[]{faceBase[0] + u, faceBase[1] + v, faceBase[2]};
+            case WEST, EAST -> new int[]{faceBase[0], faceBase[1] + u, faceBase[2] + v};
         };
     }
     
@@ -658,22 +666,43 @@ public class Enhanced3DLightEngine {
         if (lightType == LightType.SKY) {
             return state.getLightBlock(level, pos);
         } else {
-            return Math.max(1, state.getLightBlock(level, pos));
+            return state.isAir() ? 0 : (state.canOcclude() ? 15 : 1);
         }
     }
     
     private static long packCubeCoords(int x, int y, int z) {
-        return ((long) x & 0x1FFFFF) |
-               (((long) y & 0x1FFFFF) << 21) |
-               (((long) z & 0x1FFFFF) << 42);
+        return ((long)(x & 0x1FFFFF)) | 
+               (((long)(y & 0x1FFFFF)) << 21) |
+               (((long)(z & 0x1FFFFF)) << 42);
     }
     
     public void shutdown() {
-        maintenanceExecutor.shutdown();
         lightingExecutor.shutdown();
+        maintenanceExecutor.shutdown();
+        
+        try {
+            if (!lightingExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                lightingExecutor.shutdownNow();
+            }
+            if (!maintenanceExecutor.awaitTermination(1, TimeUnit.SECONDS)) {
+                maintenanceExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            lightingExecutor.shutdownNow();
+            maintenanceExecutor.shutdownNow();
+        }
     }
     
-    // Data classes
+    // Performance getters
+    public long getLightUpdatesProcessed() { return lightUpdatesProcessed.get(); }
+    public double getCacheHitRate() {
+        long total = cacheHits.get() + cacheMisses.get();
+        return total > 0 ? (double) cacheHits.get() / total : 0.0;
+    }
+    public int getActivePropagations() { return activePropagations.get(); }
+    public int getCacheSize() { return lightCache.size(); }
+    
+    // Enums and inner classes
     private enum LightType {
         SKY, BLOCK
     }
@@ -707,8 +736,7 @@ public class Enhanced3DLightEngine {
         @Override
         public int compareTo(LightUpdate other) {
             int priorityCompare = Integer.compare(this.priority.value, other.priority.value);
-            if (priorityCompare != 0) return priorityCompare;
-            return Long.compare(this.timestamp, other.timestamp);
+            return priorityCompare != 0 ? priorityCompare : Long.compare(this.timestamp, other.timestamp);
         }
     }
     
@@ -740,7 +768,7 @@ public class Enhanced3DLightEngine {
         }
         
         boolean isExpired(long currentTime) {
-            return currentTime - timestamp > 5000; // 5 seconds
+            return (currentTime - timestamp) > CACHE_EXPIRE_TIME;
         }
     }
     
@@ -750,17 +778,18 @@ public class Enhanced3DLightEngine {
         final long lastAccess;
         
         CubeLight(CubeChunk cube, long lastAccess) {
-            this.skyLight = new byte[CubeChunk.SIZE * CubeChunk.SIZE * CubeChunk.SIZE];
-            this.blockLight = new byte[CubeChunk.SIZE * CubeChunk.SIZE * CubeChunk.SIZE];
+            int size = CubeChunk.SIZE * CubeChunk.SIZE * CubeChunk.SIZE;
+            this.skyLight = new byte[size];
+            this.blockLight = new byte[size];
             this.lastAccess = lastAccess;
             
-            // Copy light data
+            // Copy light data from cube
             for (int x = 0; x < CubeChunk.SIZE; x++) {
                 for (int y = 0; y < CubeChunk.SIZE; y++) {
                     for (int z = 0; z < CubeChunk.SIZE; z++) {
-                        int index = (y * CubeChunk.SIZE + z) * CubeChunk.SIZE + x;
-                        skyLight[index] = cube.getSkyLight(x, y, z);
-                        blockLight[index] = cube.getBlockLight(x, y, z);
+                        int index = x + y * CubeChunk.SIZE + z * CubeChunk.SIZE * CubeChunk.SIZE;
+                        this.skyLight[index] = (byte) cube.getSkyLight(x, y, z);
+                        this.blockLight[index] = (byte) cube.getBlockLight(x, y, z);
                     }
                 }
             }
