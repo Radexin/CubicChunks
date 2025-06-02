@@ -25,7 +25,11 @@ public class CubicChunksSavedData extends SavedData {
     }
 
     public static CubicChunksSavedData load(CompoundTag tag, HolderLookup.Provider provider, CubeChunkGenerator generator) {
-        CubeWorld world = CubeWorld.fromNBT(tag, generator);
+        // Get biome registry from provider
+        var biomeRegistryLookup = provider.lookupOrThrow(net.minecraft.core.registries.Registries.BIOME);
+        // Convert to Registry if needed - for now use null as fallback since Registry interface changed
+        net.minecraft.core.Registry<net.minecraft.world.level.biome.Biome> biomeRegistry = null;
+        CubeWorld world = CubeWorld.fromNBT(tag, generator, biomeRegistry);
         return new CubicChunksSavedData(world, generator);
     }
 

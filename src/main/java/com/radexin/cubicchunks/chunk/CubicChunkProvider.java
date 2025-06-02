@@ -3,14 +3,21 @@ package com.radexin.cubicchunks.chunk;
 import java.io.File;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.core.Registry;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.core.registries.Registries;
 
 public class CubicChunkProvider {
     private final CubicChunkMap chunkMap = new CubicChunkMap();
     private CubicChunkStorage storage;
     private CubicEntityManager entityManager;
+    private final Level level;
 
     public CubicChunkProvider(File worldDir, Level level) {
-        this.storage = new CubicChunkStorage(worldDir);
+        this.level = level;
+        // Get biome registry from level
+        Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
+        this.storage = new CubicChunkStorage(worldDir, biomeRegistry);
         this.entityManager = new CubicEntityManager(level, this);
     }
 
@@ -65,7 +72,7 @@ public class CubicChunkProvider {
         // Then tick all cubes
         for (CubeColumn column : chunkMap.getAllColumns()) {
             for (CubeChunk cube : column.getLoadedCubes()) {
-                cube.tick();
+                cube.tick(level);
             }
         }
     }

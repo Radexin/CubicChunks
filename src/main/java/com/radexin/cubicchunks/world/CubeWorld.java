@@ -3,25 +3,32 @@ package com.radexin.cubicchunks.world;
 import com.radexin.cubicchunks.chunk.CubeColumn;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.core.BlockPos;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Collection;
 import java.util.ArrayList;
+import java.util.Set;
+import java.util.HashSet;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 /**
  * Manages CubeColumns and overall cubic chunks world logic.
- * Integrates column and cube management.
+ * Integrates column and cube management with lighting and ticking.
  */
 public class CubeWorld {
     // Map of (x, z) to CubeColumn
     private final Map<Long, CubeColumn> columns = new HashMap<>();
     private final CubeChunkGenerator generator;
+    private final CubicLightEngine lightEngine;
+    private final Set<CubeChunk> tickingCubes = new HashSet<>();
 
     public CubeWorld(CubeChunkGenerator generator) {
         this.generator = generator;
+        this.lightEngine = new CubicLightEngine(this);
     }
 
     /**
@@ -41,7 +48,14 @@ public class CubeWorld {
      * Unloads (removes) the CubeColumn at the given x/z.
      */
     public void unloadColumn(int x, int z) {
-        columns.remove(getKey(x, z));
+        long key = getKey(x, z);
+        CubeColumn column = columns.remove(key);
+        if (column != null) {
+            // Remove all cubes from ticking set
+            for (CubeChunk cube : column.getLoadedCubes()) {
+                tickingCubes.remove(cube);
+            }
+        }
     }
 
     /**
@@ -52,16 +66,136 @@ public class CubeWorld {
         CubeColumn column = getColumn(x, z, createIfMissing);
         if (column == null) return null;
         CubeChunk cube = column.getCube(y, createIfMissing);
-        if (cube != null && createIfMissing && isCubeEmpty(cube)) {
+        if (cube != null && createIfMissing && !cube.isGenerated()) {
             generator.generateCube(cube);
+            // Add to ticking cubes if it has content
+            if (!cube.isEmpty()) {
+                tickingCubes.add(cube);
+            }
         }
         return cube;
     }
 
-    private boolean isCubeEmpty(CubeChunk cube) {
-        // Simple check: if all blocks are air, consider it empty (could be optimized)
-        // For now, just check the first block
-        return cube.getBlockState(0, 0, 0).isAir();
+    /**
+     * Sets a block in the world and updates lighting
+     */
+    public boolean setBlock(int worldX, int worldY, int worldZ, BlockState newState) {
+        int cubeX = Math.floorDiv(worldX, CubeChunk.SIZE);
+        int cubeY = Math.floorDiv(worldY, CubeChunk.SIZE);
+        int cubeZ = Math.floorDiv(worldZ, CubeChunk.SIZE);
+        
+        CubeChunk cube = getCube(cubeX, cubeY, cubeZ, true);
+        if (cube == null) return false;
+        
+        int localX = Math.floorMod(worldX, CubeChunk.SIZE);
+        int localY = Math.floorMod(worldY, CubeChunk.SIZE);
+        int localZ = Math.floorMod(worldZ, CubeChunk.SIZE);
+        
+        BlockState oldState = cube.getBlockState(localX, localY, localZ);
+        cube.setBlockState(localX, localY, localZ, newState);
+        
+        // Update lighting
+        lightEngine.updateLighting(worldX, worldY, worldZ, newState, oldState);
+        
+        // Add to ticking cubes if it now has content
+        if (!cube.isEmpty()) {
+            tickingCubes.add(cube);
+        }
+        
+        return true;
+    }
+
+    /**
+     * Gets a block from the world
+     */
+    public BlockState getBlock(int worldX, int worldY, int worldZ) {
+        int cubeX = Math.floorDiv(worldX, CubeChunk.SIZE);
+        int cubeY = Math.floorDiv(worldY, CubeChunk.SIZE);
+        int cubeZ = Math.floorDiv(worldZ, CubeChunk.SIZE);
+        
+        CubeChunk cube = getCube(cubeX, cubeY, cubeZ, false);
+        if (cube == null) return net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+        
+        int localX = Math.floorMod(worldX, CubeChunk.SIZE);
+        int localY = Math.floorMod(worldY, CubeChunk.SIZE);
+        int localZ = Math.floorMod(worldZ, CubeChunk.SIZE);
+        
+        return cube.getBlockState(localX, localY, localZ);
+    }
+
+    /**
+     * Gets the light level at a position
+     */
+    public int getLightLevel(int worldX, int worldY, int worldZ) {
+        int cubeX = Math.floorDiv(worldX, CubeChunk.SIZE);
+        int cubeY = Math.floorDiv(worldY, CubeChunk.SIZE);
+        int cubeZ = Math.floorDiv(worldZ, CubeChunk.SIZE);
+        
+        CubeChunk cube = getCube(cubeX, cubeY, cubeZ, false);
+        if (cube == null) return 0;
+        
+        int localX = Math.floorMod(worldX, CubeChunk.SIZE);
+        int localY = Math.floorMod(worldY, CubeChunk.SIZE);
+        int localZ = Math.floorMod(worldZ, CubeChunk.SIZE);
+        
+        return cube.getLightLevel(localX, localY, localZ);
+    }
+
+    /**
+     * Ticks all active cubes
+     */
+    public void tick(net.minecraft.world.level.Level level) {
+        // Tick all cubes that have content
+        for (CubeChunk cube : new ArrayList<>(tickingCubes)) {
+            if (cube.isEmpty()) {
+                tickingCubes.remove(cube);
+            } else {
+                cube.tick(level);
+            }
+        }
+    }
+
+    /**
+     * Loads cubes in a radius around a position
+     */
+    public void loadCubesAround(int centerX, int centerY, int centerZ, int horizontalRadius, int verticalRadius) {
+        for (int x = centerX - horizontalRadius; x <= centerX + horizontalRadius; x++) {
+            for (int z = centerZ - horizontalRadius; z <= centerZ + horizontalRadius; z++) {
+                for (int y = centerY - verticalRadius; y <= centerY + verticalRadius; y++) {
+                    // Check if within circular radius
+                    double distSq = Math.pow(x - centerX, 2) + Math.pow(z - centerZ, 2);
+                    if (distSq <= horizontalRadius * horizontalRadius) {
+                        getCube(x, y, z, true);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Unloads cubes outside a radius around a position
+     */
+    public void unloadCubesOutside(int centerX, int centerY, int centerZ, int horizontalRadius, int verticalRadius) {
+        for (CubeColumn column : new ArrayList<>(columns.values())) {
+            int columnX = column.getX();
+            int columnZ = column.getZ();
+            
+            // Check if column is outside horizontal radius
+            double distSq = Math.pow(columnX - centerX, 2) + Math.pow(columnZ - centerZ, 2);
+            if (distSq > (horizontalRadius + 2) * (horizontalRadius + 2)) {
+                unloadColumn(columnX, columnZ);
+                continue;
+            }
+            
+            // Unload cubes outside vertical radius
+            for (CubeChunk cube : new ArrayList<>(column.getLoadedCubes())) {
+                int cubeY = cube.getCubeY();
+                if (Math.abs(cubeY - centerY) > verticalRadius + 2) {
+                    column.unloadCube(cubeY);
+                    tickingCubes.remove(cube);
+                }
+            }
+        }
     }
 
     private long getKey(int x, int z) {
@@ -78,15 +212,22 @@ public class CubeWorld {
         return tag;
     }
 
-    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator) {
+    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator, net.minecraft.core.Registry<net.minecraft.world.level.biome.Biome> biomeRegistry) {
         CubeWorld world = new CubeWorld(generator);
         ListTag columnsList = tag.getList("columns", Tag.TAG_COMPOUND);
         for (int i = 0; i < columnsList.size(); i++) {
             CompoundTag columnTag = columnsList.getCompound(i);
-            CubeColumn column = CubeColumn.fromNBT(columnTag);
+            CubeColumn column = CubeColumn.fromNBT(columnTag, biomeRegistry);
             if (column != null) {
-                long key = ((long) column.getX() & 0xFFFFFFFFL) | (((long) column.getZ() & 0xFFFFFFFFL) << 32);
+                long key = world.getKey(column.getX(), column.getZ());
                 world.columns.put(key, column);
+                
+                // Add non-empty cubes to ticking set
+                for (CubeChunk cube : column.getLoadedCubes()) {
+                    if (!cube.isEmpty()) {
+                        world.tickingCubes.add(cube);
+                    }
+                }
             }
         }
         return world;
@@ -101,5 +242,26 @@ public class CubeWorld {
             cubes.addAll(column.getLoadedCubes());
         }
         return cubes;
+    }
+
+    /**
+     * Returns the number of loaded columns
+     */
+    public int getLoadedColumnCount() {
+        return columns.size();
+    }
+
+    /**
+     * Returns the number of loaded cubes
+     */
+    public int getLoadedCubeCount() {
+        return getLoadedCubes().size();
+    }
+
+    /**
+     * Gets the lighting engine
+     */
+    public CubicLightEngine getLightEngine() {
+        return lightEngine;
     }
 } 

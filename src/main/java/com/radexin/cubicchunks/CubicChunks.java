@@ -198,6 +198,8 @@ public class CubicChunks
                     )
                 )
         );
+        
+        // Command to set blocks in cubic chunks
         event.getDispatcher().register(
             Commands.literal("cubicsetblock")
                 .then(Commands.argument("x", IntegerArgumentType.integer())
@@ -232,6 +234,58 @@ public class CubicChunks
                                     return 1;
                                 })
                             )
+                        )
+                    )
+                )
+        );
+        
+        // Command to get information about cubic chunks
+        event.getDispatcher().register(
+            Commands.literal("cubicinfo")
+                .executes(ctx -> {
+                    ServerPlayer player = ctx.getSource().getPlayer();
+                    if (player != null) {
+                        CubeWorld cubeWorld = savedData.getCubeWorld();
+                        int loadedCubes = cubeWorld.getLoadedCubeCount();
+                        int loadedColumns = cubeWorld.getLoadedColumnCount();
+                        
+                        player.sendSystemMessage(Component.literal("Cubic Chunks Info:"));
+                        player.sendSystemMessage(Component.literal("- Loaded cubes: " + loadedCubes));
+                        player.sendSystemMessage(Component.literal("- Loaded columns: " + loadedColumns));
+                        
+                        // Player position in cube coordinates
+                        var pos = player.blockPosition();
+                        int cubeX = Math.floorDiv(pos.getX(), CubeChunk.SIZE);
+                        int cubeY = Math.floorDiv(pos.getY(), CubeChunk.SIZE);
+                        int cubeZ = Math.floorDiv(pos.getZ(), CubeChunk.SIZE);
+                        player.sendSystemMessage(Component.literal("- Your cube: (" + cubeX + ", " + cubeY + ", " + cubeZ + ")"));
+                    }
+                    return 1;
+                })
+        );
+        
+        // Command to teleport to a specific cube
+        event.getDispatcher().register(
+            Commands.literal("cubictp")
+                .then(Commands.argument("cubeX", IntegerArgumentType.integer())
+                    .then(Commands.argument("cubeY", IntegerArgumentType.integer())
+                        .then(Commands.argument("cubeZ", IntegerArgumentType.integer())
+                            .executes(ctx -> {
+                                int cubeX = IntegerArgumentType.getInteger(ctx, "cubeX");
+                                int cubeY = IntegerArgumentType.getInteger(ctx, "cubeY");
+                                int cubeZ = IntegerArgumentType.getInteger(ctx, "cubeZ");
+                                ServerPlayer player = ctx.getSource().getPlayer();
+                                if (player != null) {
+                                    // Calculate world coordinates (center of the cube)
+                                    double worldX = cubeX * CubeChunk.SIZE + 8.0;
+                                    double worldY = cubeY * CubeChunk.SIZE + 8.0;
+                                    double worldZ = cubeZ * CubeChunk.SIZE + 8.0;
+                                    
+                                    player.teleportTo(worldX, worldY, worldZ);
+                                    player.sendSystemMessage(Component.literal("Teleported to cube (" + cubeX + ", " + cubeY + ", " + cubeZ + ")"));
+                                }
+                                return 1;
+                            })
                         )
                     )
                 )

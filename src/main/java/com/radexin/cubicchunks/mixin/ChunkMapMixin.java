@@ -56,6 +56,9 @@ public abstract class ChunkMapMixin {
         // Load cubic chunks for this column position
         var column = cubicchunks$cubeWorld.getColumn(pos.x, pos.z, true);
         
+        // Get biome registry from server level
+        var biomeRegistry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+        
         // Load cached cubes for this column
         for (Map.Entry<String, CompoundTag> entry : cubicchunks$cubeCache.entrySet()) {
             String[] coords = entry.getKey().split(",");
@@ -64,7 +67,7 @@ public abstract class ChunkMapMixin {
                 int cubeZ = Integer.parseInt(coords[2]);
                 
                 if (cubeX == pos.x && cubeZ == pos.z) {
-                    CubeChunk cube = CubeChunk.fromNBT(entry.getValue());
+                    CubeChunk cube = CubeChunk.fromNBT(entry.getValue(), biomeRegistry);
                     // Add cube to column (assuming proper integration exists)
                     column.getCube(cube.getCubeY(), true);
                 }
@@ -90,8 +93,11 @@ public abstract class ChunkMapMixin {
             String cubeKey = cubicchunks$getCubeKey(x, y, z);
             CompoundTag cached = cubicchunks$cubeCache.get(cubeKey);
             if (cached != null) {
+                // Get biome registry from server level
+                var biomeRegistry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+                
                 // Load from cache
-                CubeChunk loaded = CubeChunk.fromNBT(cached);
+                CubeChunk loaded = CubeChunk.fromNBT(cached, biomeRegistry);
                 // Replace cube data
                 for (int lx = 0; lx < CubeChunk.SIZE; lx++) {
                     for (int ly = 0; ly < CubeChunk.SIZE; ly++) {

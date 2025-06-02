@@ -3,6 +3,8 @@ package com.radexin.cubicchunks.chunk;
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.core.Registry;
+import net.minecraft.world.level.biome.Biome;
 
 /**
  * High-level storage manager for cubic chunks, handling multiple region files.
@@ -10,9 +12,11 @@ import java.util.Map;
 public class CubicChunkStorage {
     private final File worldDir;
     private final Map<Long, CubicRegionFile> regionFiles = new HashMap<>();
+    private final Registry<Biome> biomeRegistry;
 
-    public CubicChunkStorage(File worldDir) {
+    public CubicChunkStorage(File worldDir, Registry<Biome> biomeRegistry) {
         this.worldDir = worldDir;
+        this.biomeRegistry = biomeRegistry;
     }
 
     private long packRegionCoords(int regionX, int regionY, int regionZ) {
@@ -30,7 +34,7 @@ public class CubicChunkStorage {
 
         long regionKey = packRegionCoords(regionX, regionY, regionZ);
         return regionFiles.computeIfAbsent(regionKey, 
-            k -> new CubicRegionFile(worldDir, regionX, regionY, regionZ));
+            k -> new CubicRegionFile(worldDir, regionX, regionY, regionZ, biomeRegistry));
     }
 
     public void saveCube(CubeChunk cube) {

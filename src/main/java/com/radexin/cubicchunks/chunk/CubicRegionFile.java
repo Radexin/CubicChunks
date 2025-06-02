@@ -2,6 +2,10 @@ package com.radexin.cubicchunks.chunk;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.core.Registry;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.server.level.ServerLevel;
 
 import java.io.*;
 import java.util.HashMap;
@@ -16,11 +20,13 @@ public class CubicRegionFile {
     private final File regionFile;
     private final int regionX, regionY, regionZ;
     private final Map<Long, CubeColumn> loadedColumns = new HashMap<>();
+    private final Registry<Biome> biomeRegistry;
 
-    public CubicRegionFile(File worldDir, int regionX, int regionY, int regionZ) {
+    public CubicRegionFile(File worldDir, int regionX, int regionY, int regionZ, Registry<Biome> biomeRegistry) {
         this.regionX = regionX;
         this.regionY = regionY;
         this.regionZ = regionZ;
+        this.biomeRegistry = biomeRegistry;
         this.regionFile = new File(worldDir, "region/r." + regionX + "." + regionY + "." + regionZ + ".ccr");
         this.regionFile.getParentFile().mkdirs();
     }
@@ -92,7 +98,7 @@ public class CubicRegionFile {
 
             String columnKey = "column_" + cubeX + "_" + cubeZ;
             if (regionTag.contains(columnKey)) {
-                return CubeColumn.fromNBT(regionTag.getCompound(columnKey));
+                return CubeColumn.fromNBT(regionTag.getCompound(columnKey), biomeRegistry);
             }
         } catch (IOException e) {
             e.printStackTrace();
