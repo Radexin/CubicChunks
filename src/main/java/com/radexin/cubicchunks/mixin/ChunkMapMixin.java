@@ -2,7 +2,7 @@ package com.radexin.cubicchunks.mixin;
 
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.world.CubeWorld;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
@@ -21,11 +21,14 @@ import java.util.concurrent.Executor;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Mixin to ChunkMap to integrate cubic chunk loading with vanilla chunk system.
+ */
 @Mixin(ChunkMap.class)
 public abstract class ChunkMapMixin {
     
     @Shadow
-    ServerLevel level;
+    public abstract ServerLevel getLevel();
     
     @Unique
     private CubeWorld cubicchunks$cubeWorld;
@@ -35,7 +38,10 @@ public abstract class ChunkMapMixin {
     
     @Inject(method = "<init>", at = @At("TAIL"))
     private void cubicchunks$initCubeWorld(CallbackInfo ci) {
-        this.cubicchunks$cubeWorld = new CubeWorld(new CubeChunkGenerator());
+        ServerLevel level = getLevel();
+        var biomeRegistry = level.registryAccess().registry(net.minecraft.core.registries.Registries.BIOME).get();
+        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
+        this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
     }
     
     @Inject(method = "save", at = @At("HEAD"))
@@ -57,7 +63,7 @@ public abstract class ChunkMapMixin {
         var column = cubicchunks$cubeWorld.getColumn(pos.x, pos.z, true);
         
         // Get biome registry from server level
-        var biomeRegistry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+        var biomeRegistry = getLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
         
         // Load cached cubes for this column
         for (Map.Entry<String, CompoundTag> entry : cubicchunks$cubeCache.entrySet()) {
@@ -94,7 +100,7 @@ public abstract class ChunkMapMixin {
             CompoundTag cached = cubicchunks$cubeCache.get(cubeKey);
             if (cached != null) {
                 // Get biome registry from server level
-                var biomeRegistry = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
+                var biomeRegistry = getLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME);
                 
                 // Load from cache
                 CubeChunk loaded = CubeChunk.fromNBT(cached, biomeRegistry);

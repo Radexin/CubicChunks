@@ -35,7 +35,7 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import com.radexin.cubicchunks.world.CubeWorld;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
@@ -93,7 +93,7 @@ public class CubicChunks
             }).build());
 
     private CubicChunksSavedData savedData;
-    private CubeChunkGenerator cubeChunkGenerator;
+    private UnifiedCubicWorldGenerator cubeChunkGenerator;
 
     // Remove SimpleChannel and old networking code. Networking is now handled via RegisterPayloadHandlerEvent and CustomPacketPayload.
     // TODO: Register network payloads for cube sync in a static event handler.
@@ -158,7 +158,8 @@ public class CubicChunks
     {
         LOGGER.info("HELLO from server starting");
         // Initialize generator
-        this.cubeChunkGenerator = new CubeChunkGenerator();
+        var biomeRegistry = event.getServer().overworld().registryAccess().registry(net.minecraft.core.registries.Registries.BIOME).get();
+        this.cubeChunkGenerator = new UnifiedCubicWorldGenerator(event.getServer().overworld(), biomeRegistry, null);
         // Load or create CubicChunksSavedData
         this.savedData = com.radexin.cubicchunks.world.CubicChunksSavedData.getOrCreate(event.getServer(), this.cubeChunkGenerator);
     }

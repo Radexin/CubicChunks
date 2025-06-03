@@ -2,7 +2,7 @@ package com.radexin.cubicchunks.mixin;
 
 import com.radexin.cubicchunks.world.CubeWorld;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
@@ -32,7 +32,17 @@ public abstract class LevelMixin {
     
     @Inject(method = "<init>", at = @At("TAIL"))
     private void cubicchunks$initCubeWorld(CallbackInfo ci) {
-        this.cubicchunks$cubeWorld = new CubeWorld(new CubeChunkGenerator());
+        Level level = (Level)(Object)this;
+        // Only initialize for server levels and client levels that support cubic chunks
+        if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            var biomeRegistry = serverLevel.registryAccess().registry(net.minecraft.core.registries.Registries.BIOME).get();
+            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
+            this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
+        } else if (level instanceof net.minecraft.client.multiplayer.ClientLevel) {
+            // For client levels, create a simpler version without server dependencies
+            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, null, null);
+            this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
+        }
     }
     
     @Inject(method = "getBlockState", at = @At("HEAD"), cancellable = true)

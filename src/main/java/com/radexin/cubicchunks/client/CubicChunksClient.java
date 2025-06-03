@@ -8,7 +8,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import com.radexin.cubicchunks.world.CubeWorld;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.chunk.CubeColumn;
 import net.minecraft.client.Minecraft;
@@ -38,8 +38,9 @@ public class CubicChunksClient {
     public static void onClientSetup(FMLClientSetupEvent event) {
         LOGGER.info("CubicChunks client setup: Initializing cubic chunks client systems");
         
-        // Initialize client CubeWorld
-        clientCubeWorld = new CubeWorld(new CubeChunkGenerator());
+        // Initialize client CubeWorld with UnifiedCubicWorldGenerator
+        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(null, null, null);
+        clientCubeWorld = new CubeWorld(generator, null, null);
         
         // Initialize cube renderer
         cubeRenderer = new UnifiedCubicRenderer();
@@ -54,7 +55,8 @@ public class CubicChunksClient {
     public static void onPlayerJoin(ClientPlayerNetworkEvent.LoggingIn event) {
         LOGGER.info("Player joining - resetting client cube world");
         // Reset cube world when joining a server
-        clientCubeWorld = new CubeWorld(new CubeChunkGenerator());
+        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(null, null, null);
+        clientCubeWorld = new CubeWorld(generator, null, null);
         if (cubeRenderer != null) {
             cubeRenderer.clearCache();
         }

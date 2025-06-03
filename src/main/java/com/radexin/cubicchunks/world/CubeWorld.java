@@ -4,7 +4,7 @@ import com.radexin.cubicchunks.chunk.CubeColumn;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
 import com.radexin.cubicchunks.lighting.UnifiedCubicLightEngine;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -25,11 +25,11 @@ import net.minecraft.nbt.Tag;
 public class CubeWorld {
     // Map of (x, z) to CubeColumn
     private final Map<Long, CubeColumn> columns = new HashMap<>();
-    private final CubeChunkGenerator generator;
+    private final UnifiedCubicWorldGenerator generator;
     private final UnifiedCubicLightEngine lightEngine;
     private final Set<CubeChunk> tickingCubes = new HashSet<>();
 
-    public CubeWorld(CubeChunkGenerator generator, UnifiedCubicChunkManager chunkManager, Level level) {
+    public CubeWorld(UnifiedCubicWorldGenerator generator, UnifiedCubicChunkManager chunkManager, Level level) {
         this.generator = generator;
         this.lightEngine = new UnifiedCubicLightEngine(chunkManager, this, level);
     }
@@ -206,7 +206,7 @@ public class CubeWorld {
         return tag;
     }
 
-    public static CubeWorld fromNBT(CompoundTag tag, CubeChunkGenerator generator, 
+    public static CubeWorld fromNBT(CompoundTag tag, UnifiedCubicWorldGenerator generator,
                                    UnifiedCubicChunkManager chunkManager, Level level,
                                    net.minecraft.core.Registry<net.minecraft.world.level.biome.Biome> biomeRegistry) {
         CubeWorld world = new CubeWorld(generator, chunkManager, level);

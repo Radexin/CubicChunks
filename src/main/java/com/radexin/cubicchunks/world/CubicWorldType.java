@@ -1,7 +1,7 @@
 package com.radexin.cubicchunks.world;
 
 import com.radexin.cubicchunks.CubicChunks;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -37,8 +37,10 @@ public class CubicWorldType {
     public static boolean isCubicWorld(Level level) {
         if (level instanceof ServerLevel serverLevel) {
             // Check if the level has cubic chunks data
+            Registry<Biome> biomeRegistry = serverLevel.registryAccess().registry(Registries.BIOME).get();
+            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(serverLevel, biomeRegistry, null);
             return serverLevel.getDataStorage().get(
-                CubicChunksSavedData.factory(new CubeChunkGenerator()),
+                CubicChunksSavedData.factory(generator),
                 "cubicchunks"
             ) != null;
         }
@@ -60,24 +62,21 @@ public class CubicWorldType {
     public static boolean isCubicDimension(LevelStem levelStem) {
         ChunkGenerator generator = levelStem.generator();
         // Check if the chunk generator is our cubic chunk generator
-        return generator.getClass().equals(CubeChunkGenerator.class);
+        return generator.getClass().equals(UnifiedCubicWorldGenerator.class);
     }
     
     /**
      * Creates a cubic chunk generator for a dimension.
      */
-    public static CubeChunkGenerator createCubicGenerator(Registry<Biome> biomeRegistry) {
-        return new CubeChunkGenerator();
+    public static UnifiedCubicWorldGenerator createCubicGenerator(Registry<Biome> biomeRegistry) {
+        return new UnifiedCubicWorldGenerator(null, biomeRegistry, null);
     }
     
     /**
      * Creates a cubic chunk generator with a specific biome source.
      */
-    public static CubeChunkGenerator createCubicGenerator(BiomeSource biomeSource) {
-        CubeChunkGenerator generator = new CubeChunkGenerator();
-        // Set the biome source if the generator supports it
-        // This would need to be implemented in CubeChunkGenerator
-        return generator;
+    public static UnifiedCubicWorldGenerator createCubicGenerator(BiomeSource biomeSource) {
+        return new UnifiedCubicWorldGenerator(null, null, biomeSource);
     }
     
     /**
@@ -94,7 +93,8 @@ public class CubicWorldType {
         
         try {
             // Create cubic chunks saved data
-            CubeChunkGenerator generator = new CubeChunkGenerator();
+            Registry<Biome> biomeRegistry = level.registryAccess().registry(Registries.BIOME).get();
+            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
             CubicChunksSavedData savedData = CubicChunksSavedData.getOrCreate(level.getServer(), generator);
             
             // Mark as dirty to ensure it gets saved
@@ -121,7 +121,8 @@ public class CubicWorldType {
      */
     public static void initializeCubicWorld(ServerLevel level) {
         if (!isCubicWorld(level)) {
-            CubeChunkGenerator generator = new CubeChunkGenerator();
+            Registry<Biome> biomeRegistry = level.registryAccess().registry(Registries.BIOME).get();
+            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
             CubicChunksSavedData savedData = CubicChunksSavedData.getOrCreate(level.getServer(), generator);
             savedData.setDirty();
             

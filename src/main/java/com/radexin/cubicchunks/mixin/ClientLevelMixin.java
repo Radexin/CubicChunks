@@ -2,7 +2,6 @@ package com.radexin.cubicchunks.mixin;
 
 import com.radexin.cubicchunks.world.CubeWorld;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
 import com.radexin.cubicchunks.client.CubicChunksClient;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.state.BlockState;

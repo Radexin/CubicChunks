@@ -29,7 +29,7 @@ public class CubicChunkProvider {
     private class SimpleCubicChunkManager extends UnifiedCubicChunkManager {
         public SimpleCubicChunkManager() {
             // Create with minimal dependencies - just need the getCube method for entity manager
-            super(null, null, null, null, null); // We'll override getCube method
+            super(null, null, null, null); // We'll override getCube method
         }
 
         @Override

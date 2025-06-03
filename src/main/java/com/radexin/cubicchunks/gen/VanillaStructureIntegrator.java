@@ -544,7 +544,7 @@ public class VanillaStructureIntegrator {
         int cubeX = Math.floorDiv(pos.getX(), CubeChunk.SIZE);
         int cubeY = Math.floorDiv(pos.getY(), CubeChunk.SIZE);
         int cubeZ = Math.floorDiv(pos.getZ(), CubeChunk.SIZE);
-        return chunkManager.getCube(cubeX, cubeY, cubeZ);
+        return chunkManager.getCube(cubeX, cubeY, cubeZ, false);
     }
     
     private long generateStructureId(BlockPos pos, String type) {
@@ -605,7 +605,7 @@ public class VanillaStructureIntegrator {
             for (int x = minCubeX; x <= maxCubeX; x++) {
                 for (int y = minCubeY; y <= maxCubeY; y++) {
                     for (int z = minCubeZ; z <= maxCubeZ; z++) {
-                        if (chunkManager.getCube(x, y, z) == null) {
+                        if (chunkManager.getCube(x, y, z, false) == null) {
                             return false;
                         }
                     }
