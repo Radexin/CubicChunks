@@ -1,7 +1,7 @@
 package com.radexin.cubicchunks.chunk;
 
 import com.radexin.cubicchunks.Config;
-import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
+import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Combines advanced spatial partitioning, priority-based loading, player tracking,
  * and optimized memory management from multiple implementations.
  */
-public class UnifiedCubicChunkManager {
+public class CubicChunkManager {
     // Configuration constants
     private static final int MAX_LOADED_CUBES = Config.maxLoadedCubes;
     private static final int UNLOAD_THRESHOLD = (int)(MAX_LOADED_CUBES * 0.8);
@@ -30,8 +30,8 @@ public class UnifiedCubicChunkManager {
     
     // Core components
     private final ServerLevel level;
-    private final UnifiedCubicWorldGenerator worldGenerator;
-    private final UnifiedCubicChunkStorage storage;
+    private final CubicWorldGenerator worldGenerator;
+    private final CubicChunkStorage storage;
     private final Registry<Biome> biomeRegistry;
     
     // Spatial data structures
@@ -61,8 +61,8 @@ public class UnifiedCubicChunkManager {
     private int horizontalRenderDistance = 8;
     private int verticalRenderDistance = 4;
     
-    public UnifiedCubicChunkManager(ServerLevel level, UnifiedCubicWorldGenerator worldGenerator, 
-                                  UnifiedCubicChunkStorage storage, Registry<Biome> biomeRegistry) {
+    public CubicChunkManager(ServerLevel level, CubicWorldGenerator worldGenerator, 
+                                  CubicChunkStorage storage, Registry<Biome> biomeRegistry) {
         this.level = level;
         this.worldGenerator = worldGenerator;
         this.storage = storage;
@@ -476,7 +476,7 @@ public class UnifiedCubicChunkManager {
             this.cubeZ = newZ;
         }
         
-        void unloadFarChunks(UnifiedCubicChunkManager manager) {
+        void unloadFarChunks(CubicChunkManager manager) {
             Iterator<CubePos> iterator = loadedChunks.iterator();
             while (iterator.hasNext()) {
                 CubePos pos = iterator.next();

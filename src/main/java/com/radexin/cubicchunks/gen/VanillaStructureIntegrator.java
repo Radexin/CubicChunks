@@ -1,7 +1,7 @@
 package com.radexin.cubicchunks.gen;
 
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
+import com.radexin.cubicchunks.chunk.CubicChunkManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.util.RandomSource;
@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
  */
 public class VanillaStructureIntegrator {
     private final Level level;
-    private final UnifiedCubicChunkManager chunkManager;
+    private final CubicChunkManager chunkManager;
     private final Enhanced3DBiomeProvider biomeProvider;
     private final StructureManager structureManager;
     
@@ -40,7 +40,7 @@ public class VanillaStructureIntegrator {
     // Structure placement rules
     private final Map<Class<? extends Structure>, StructurePlacementRules> placementRules = new HashMap<>();
     
-    public VanillaStructureIntegrator(Level level, UnifiedCubicChunkManager chunkManager, Enhanced3DBiomeProvider biomeProvider) {
+    public VanillaStructureIntegrator(Level level, CubicChunkManager chunkManager, Enhanced3DBiomeProvider biomeProvider) {
         this.level = level;
         this.chunkManager = chunkManager;
         this.biomeProvider = biomeProvider;
@@ -593,7 +593,7 @@ public class VanillaStructureIntegrator {
                    bounds.minZ() <= cubeMaxZ && bounds.maxZ() >= cubeMinZ;
         }
         
-        boolean canGenerate(UnifiedCubicChunkManager chunkManager) {
+        boolean canGenerate(CubicChunkManager chunkManager) {
             // Check if all required cubes are loaded
             int minCubeX = Math.floorDiv(bounds.minX(), CubeChunk.SIZE);
             int minCubeY = Math.floorDiv(bounds.minY(), CubeChunk.SIZE);

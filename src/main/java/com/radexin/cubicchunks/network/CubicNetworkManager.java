@@ -1,7 +1,7 @@
 package com.radexin.cubicchunks.network;
 
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
+import com.radexin.cubicchunks.chunk.CubicChunkManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -32,11 +32,11 @@ import java.io.IOException;
  * - Batch processing for performance
  * - Intelligent caching and deduplication
  */
-public class UnifiedCubicNetworkManager {
+public class CubicNetworkManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     
     private final ServerLevel level;
-    private final UnifiedCubicChunkManager chunkManager;
+    private final CubicChunkManager chunkManager;
     private final ExecutorService networkExecutor;
     
     // Player tracking for network synchronization
@@ -59,7 +59,7 @@ public class UnifiedCubicNetworkManager {
     private long totalPacketsSent = 0;
     private long compressionSavings = 0;
     
-    public UnifiedCubicNetworkManager(ServerLevel level, UnifiedCubicChunkManager chunkManager) {
+    public CubicNetworkManager(ServerLevel level, CubicChunkManager chunkManager) {
         this.level = level;
         this.chunkManager = chunkManager;
         this.networkExecutor = Executors.newFixedThreadPool(4);

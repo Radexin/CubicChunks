@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class Enhanced3DBiomeProvider {
     private final Registry<Biome> biomeRegistry;
     private final BiomeSource vanillaBiomeSource;
-    private final Enhanced3DWorldGenerator worldGenerator;
+    private final CubicWorldGenerator worldGenerator;
     
     // 3D biome noise generators
     private final PerlinNoise temperatureVariation;
@@ -38,7 +38,7 @@ public class Enhanced3DBiomeProvider {
     private static final int MOUNTAIN_LEVEL = 128;
     private static final int SKY_LEVEL = 256;
     
-    public Enhanced3DBiomeProvider(Registry<Biome> biomeRegistry, BiomeSource vanillaBiomeSource, Enhanced3DWorldGenerator worldGenerator) {
+    public Enhanced3DBiomeProvider(Registry<Biome> biomeRegistry, BiomeSource vanillaBiomeSource, CubicWorldGenerator worldGenerator) {
         this.biomeRegistry = biomeRegistry;
         this.vanillaBiomeSource = vanillaBiomeSource;
         this.worldGenerator = worldGenerator;

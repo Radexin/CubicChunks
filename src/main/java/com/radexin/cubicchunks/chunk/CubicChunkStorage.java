@@ -25,7 +25,7 @@ import java.util.zip.GZIPOutputStream;
  * - Asynchronous I/O with compression
  * - Intelligent batching and performance optimization
  */
-public class UnifiedCubicChunkStorage {
+public class CubicChunkStorage {
     // Storage configuration
     private static final int REGION_SIZE = 32; // 32x32x32 cubes per region
     private static final int CACHE_SIZE = 2048;
@@ -56,7 +56,7 @@ public class UnifiedCubicChunkStorage {
     private final AtomicLong bytesRead = new AtomicLong(0);
     private final AtomicLong bytesWritten = new AtomicLong(0);
     
-    public UnifiedCubicChunkStorage(File worldDir, Registry<Biome> biomeRegistry) {
+    public CubicChunkStorage(File worldDir, Registry<Biome> biomeRegistry) {
         this.worldDir = worldDir;
         this.biomeRegistry = biomeRegistry;
         this.regionsDir = new File(worldDir, "cubic_regions");
@@ -70,7 +70,7 @@ public class UnifiedCubicChunkStorage {
         maintenanceExecutor.scheduleAtFixedRate(this::performMaintenance, 30, 30, TimeUnit.SECONDS);
     }
     
-    public UnifiedCubicChunkStorage(LevelStorageSource.LevelStorageAccess levelStorage, Registry<Biome> biomeRegistry) {
+    public CubicChunkStorage(LevelStorageSource.LevelStorageAccess levelStorage, Registry<Biome> biomeRegistry) {
         this(levelStorage.getLevelPath(net.minecraft.world.level.storage.LevelResource.ROOT).toFile(), biomeRegistry);
     }
     

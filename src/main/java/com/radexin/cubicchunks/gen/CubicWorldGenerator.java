@@ -1,80 +1,148 @@
 package com.radexin.cubicchunks.gen;
 
+import com.radexin.cubicchunks.Config;
 import com.radexin.cubicchunks.chunk.CubeChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.levelgen.synth.PerlinNoise;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.LegacyRandomSource;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.core.Holder;
-import net.minecraft.world.level.biome.BiomeResolver;
-import net.minecraft.world.level.biome.Climate;
-import net.minecraft.core.Registry;
-import net.minecraft.world.level.biome.Biomes;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.world.level.levelgen.feature.Feature;
+import net.minecraft.world.level.levelgen.synth.PerlinNoise;
 import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
-import net.minecraft.world.level.levelgen.structure.templatesystem.RuleTest;
-import net.minecraft.world.level.levelgen.structure.templatesystem.BlockMatchTest;
+import net.minecraft.core.registries.Registries;
 
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Advanced 3D world generation system for cubic chunks.
- * Provides proper 3D terrain generation with biome-aware features and structures.
+ * Advanced 3D world generator for cubic chunks that merges the best features
+ * from both CubicWorldGenerator and CubicWorldGenerator.
+ * 
+ * Features:
+ * - Asynchronous generation with thread pool
+ * - Comprehensive 3D terrain generation with multi-octave noise
+ * - Advanced cave systems with multiple types
+ * - Full ore generation with depth-based distribution
+ * - Underground structures (dungeons, geodes, ore veins)
+ * - Aquifer and lava feature generation
+ * - 3D biome support with climate-based selection
+ * - Configuration-based feature toggling
+ * - Proper Minecraft integration with BiomeSource and Registry
  */
 public class CubicWorldGenerator {
-    // Noise generators for different aspects of terrain
+    // Core systems
+    private final Level level;
+    private final Registry<Biome> biomeRegistry;
+    private final BiomeSource biomeSource;
+    private final ExecutorService generationExecutor;
+    private final long seed;
+    private final RandomSource random;
+    
+    // Comprehensive noise generators for all aspects of generation
     private final PerlinNoise continentalNoise;
     private final PerlinNoise erosionNoise;
     private final PerlinNoise peaksValleysNoise;
-    private final PerlinNoise caveNoise;
-    private final PerlinNoise oreNoise;
+    private final PerlinNoise weirdnessNoise;
     private final PerlinNoise temperatureNoise;
     private final PerlinNoise humidityNoise;
-    private final PerlinNoise weirdnessNoise;
+    private final PerlinNoise biomeNoise;
+    
+    // Feature-specific noise generators
+    private final PerlinNoise caveNoise;
+    private final PerlinNoise caveLayerNoise;
+    private final PerlinNoise caveChamberNoise;
+    private final PerlinNoise oreNoise;
+    private final PerlinNoise aquiferNoise;
+    private final PerlinNoise structureNoise;
+    
+    // Configuration system
+    private final boolean enableAdvancedTerrain;
+    private final boolean enableCaves;
+    private final boolean enableOres;
+    private final boolean enableUndergroundStructures;
+    private final boolean enableVerticalBiomes;
+    private final boolean enableAquifers;
+    private final boolean enableLavaFeatures;
+    private final int generationThreads;
     
     // Ore configurations
     private final Map<OreType, OreConfiguration> oreConfigurations;
-    
-    // World settings
-    private final long seed;
-    private final RandomSource random;
     
     // Terrain parameters
     private final int seaLevel = 63;
     private final int minY = -64;
     private final int maxY = 320;
     
-    public CubicWorldGenerator(long seed) {
-        this.seed = seed;
+    public CubicWorldGenerator(Level level, Registry<Biome> biomeRegistry, BiomeSource biomeSource) {
+        this.level = level;
+        this.biomeRegistry = biomeRegistry;
+        this.biomeSource = biomeSource;
+        this.seed = level.getRandom().nextLong();
         this.random = new LegacyRandomSource(seed);
         
+        // Load configuration
+        this.enableAdvancedTerrain = Config.enableAdvancedTerrain;
+        this.enableCaves = Config.enableCaves;
+        this.enableOres = Config.enableOres;
+        this.enableUndergroundStructures = Config.enableUndergroundStructures;
+        this.enableVerticalBiomes = Config.enableVerticalBiomes;
+        this.enableAquifers = true; // Default enabled
+        this.enableLavaFeatures = true; // Default enabled
+        this.generationThreads = Config.cubeGenerationThreads;
+        
+        this.generationExecutor = Executors.newFixedThreadPool(generationThreads);
+        
+        // Initialize comprehensive noise system
         WorldgenRandom worldgenRandom = new WorldgenRandom(new LegacyRandomSource(seed));
         
-        // Initialize noise generators with different scales and octaves for varied terrain
-        this.continentalNoise = PerlinNoise.create(worldgenRandom, -9, 1.0, 1.0); // Large scale continent shaping
-        this.erosionNoise = PerlinNoise.create(worldgenRandom, -7, 1.0, 1.0, 1.0); // Medium scale erosion patterns
-        this.peaksValleysNoise = PerlinNoise.create(worldgenRandom, -8, 1.0, 1.0, 1.0); // Mountain and valley formation
-        this.caveNoise = PerlinNoise.create(worldgenRandom, -6, 1.0, 1.0, 1.0); // Cave generation
-        this.oreNoise = PerlinNoise.create(worldgenRandom, -4, 1.0, 1.0, 1.0); // Ore distribution
-        this.temperatureNoise = PerlinNoise.create(worldgenRandom, -10, 1.0, 1.0); // Temperature variation
-        this.humidityNoise = PerlinNoise.create(worldgenRandom, -10, 1.0, 1.0); // Humidity variation
-        this.weirdnessNoise = PerlinNoise.create(worldgenRandom, -5, 1.0, 1.0); // Special terrain features
+        // Multi-octave terrain shaping noise for high detail
+        this.continentalNoise = PerlinNoise.create(worldgenRandom, List.of(-9, -8, -7, -6, -5, -4, -3, -2, -1, 0));
+        this.erosionNoise = PerlinNoise.create(worldgenRandom, List.of(-7, -6, -5, -4, -3, -2, -1, 0));
+        this.peaksValleysNoise = PerlinNoise.create(worldgenRandom, List.of(-8, -7, -6, -5, -4, -3, -2, -1, 0, 1));
+        this.weirdnessNoise = PerlinNoise.create(worldgenRandom, List.of(-7, -6, -5, -4, -3, -2, -1, 0, 1));
+        
+        // Climate noise for realistic biome distribution
+        this.temperatureNoise = PerlinNoise.create(worldgenRandom, List.of(-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0));
+        this.humidityNoise = PerlinNoise.create(worldgenRandom, List.of(-8, -7, -6, -5, -4, -3, -2, -1, 0));
+        this.biomeNoise = PerlinNoise.create(worldgenRandom, List.of(-7, -6, -5, -4, -3, -2, -1, 0));
+        
+        // Advanced cave system noise generators
+        this.caveNoise = PerlinNoise.create(worldgenRandom, List.of(-6, -5, -4, -3, -2, -1, 0));
+        this.caveLayerNoise = PerlinNoise.create(worldgenRandom, List.of(-4, -3, -2, -1, 0));
+        this.caveChamberNoise = PerlinNoise.create(worldgenRandom, List.of(-3, -2, -1, 0));
+        
+        // Resource and feature noise
+        this.oreNoise = PerlinNoise.create(worldgenRandom, List.of(-5, -4, -3, -2, -1, 0));
+        this.aquiferNoise = PerlinNoise.create(worldgenRandom, List.of(-6, -5, -4, -3, -2, -1));
+        this.structureNoise = PerlinNoise.create(worldgenRandom, List.of(-4, -3, -2, -1, 0));
         
         // Initialize ore configurations
         this.oreConfigurations = createOreConfigurations();
     }
     
     /**
-     * Generates a complete cube using 3D noise and biome-aware generation.
+     * Generates a cubic chunk asynchronously for optimal performance.
      */
-    public void generateCube(CubeChunk cube, Registry<Biome> biomeRegistry) {
+    public CompletableFuture<Void> generateCubeAsync(CubeChunk cube) {
+        return CompletableFuture.runAsync(() -> generateCube(cube), generationExecutor);
+    }
+    
+    /**
+     * Generates a complete cube using advanced multi-pass 3D generation.
+     */
+    public void generateCube(CubeChunk cube) {
         if (cube.isGenerated()) {
             return;
         }
@@ -83,26 +151,40 @@ public class CubicWorldGenerator {
         int baseY = cube.getCubeY() * CubeChunk.SIZE;
         int baseZ = cube.getCubeZ() * CubeChunk.SIZE;
         
-        // First pass: Generate basic terrain
-        generateTerrain(cube, baseX, baseY, baseZ);
+        // Multi-pass generation for optimal quality and performance
+        generateBaseTerrain(cube, baseX, baseY, baseZ);
         
-        // Second pass: Apply biome-specific features
-        applyBiomeFeatures(cube, baseX, baseY, baseZ, biomeRegistry);
+        if (enableCaves) {
+            generateAdvancedCaves(cube, baseX, baseY, baseZ);
+        }
         
-        // Third pass: Generate structures and features
-        generateFeatures(cube, baseX, baseY, baseZ);
+        if (enableAquifers) {
+            generateAquifers(cube, baseX, baseY, baseZ);
+        }
         
-        // Fourth pass: Generate ores
-        generateOres(cube, baseX, baseY, baseZ);
+        if (enableLavaFeatures && baseY < seaLevel - 32) {
+            generateLavaFeatures(cube, baseX, baseY, baseZ);
+        }
         
-        // Final pass: Initialize lighting
+        if (enableUndergroundStructures) {
+            generateUndergroundStructures(cube, baseX, baseY, baseZ);
+        }
+        
+        if (enableOres) {
+            generateAdvancedOres(cube, baseX, baseY, baseZ);
+        }
+        
+        if (enableVerticalBiomes) {
+            applyBiomeFeatures(cube, baseX, baseY, baseZ);
+        }
+        
         initializeLighting(cube, baseX, baseY, baseZ);
         
         cube.setGenerated(true);
         cube.setDirty(true);
     }
     
-    private void generateTerrain(CubeChunk cube, int baseX, int baseY, int baseZ) {
+    private void generateBaseTerrain(CubeChunk cube, int baseX, int baseY, int baseZ) {
         for (int y = 0; y < CubeChunk.SIZE; y++) {
             for (int z = 0; z < CubeChunk.SIZE; z++) {
                 for (int x = 0; x < CubeChunk.SIZE; x++) {
@@ -110,242 +192,134 @@ public class CubicWorldGenerator {
                     int worldY = baseY + y;
                     int worldZ = baseZ + z;
                     
-                    BlockState blockToPlace = generateBlockAt(worldX, worldY, worldZ);
-                    cube.setBlockState(x, y, z, blockToPlace);
+                    BlockState blockState = generateTerrainBlock(worldX, worldY, worldZ);
+                    cube.setBlockState(x, y, z, blockState);
                 }
             }
         }
     }
     
-    private BlockState generateBlockAt(int x, int y, int z) {
-        // Calculate 3D density using multiple noise layers
-        double continentalFactor = getContinentalness(x, z);
-        double erosionFactor = getErosion(x, z);
-        double peaksValleys = getPeaksValleys(x, z);
-        double weirdness = getWeirdness(x, z);
+    private BlockState generateTerrainBlock(int worldX, int worldY, int worldZ) {
+        if (enableAdvancedTerrain) {
+            return generateAdvancedTerrain(worldX, worldY, worldZ);
+        } else {
+            return generateBasicTerrain(worldX, worldY, worldZ);
+        }
+    }
+    
+    private BlockState generateAdvancedTerrain(int worldX, int worldY, int worldZ) {
+        // Advanced multi-layer noise sampling for complex, realistic terrain
+        double continental = getContinentalness(worldX, worldZ);
+        double erosion = getErosion(worldX, worldZ);
+        double peaksValleys = getPeaksValleys(worldX, worldZ);
+        double weirdness = getWeirdness(worldX, worldZ);
         
-        // Calculate terrain height and density
-        double baseHeight = calculateTerrainHeight(x, z, continentalFactor, erosionFactor, peaksValleys);
-        double density = calculateDensity(x, y, z, baseHeight, weirdness);
+        // Calculate terrain height using combined noise factors
+        double terrainHeight = calculateTerrainHeight(worldX, worldZ, continental, erosion, peaksValleys);
+        double density = calculateDensity3D(worldX, worldY, worldZ, terrainHeight, weirdness);
         
-        // Determine block type based on density and position
+        // Advanced block type determination
         if (density > 0.5) {
-            return getTerrainBlock(x, y, z, density);
-        } else if (y <= seaLevel) {
+            return getAdvancedTerrainBlock(worldX, worldY, worldZ, density, terrainHeight);
+        } else if (worldY <= seaLevel) {
             return Blocks.WATER.defaultBlockState();
         } else {
             return Blocks.AIR.defaultBlockState();
         }
     }
     
-    private double getContinentalness(int x, int z) {
-        return continentalNoise.getValue(x * 0.0001, 0.0, z * 0.0001);
+    private BlockState generateBasicTerrain(int worldX, int worldY, int worldZ) {
+        // Simplified terrain for performance-critical scenarios
+        double height = seaLevel + continentalNoise.getValue(worldX * 0.01, 0.0, worldZ * 0.01) * 32;
+        
+        if (worldY <= height) {
+            if (worldY <= minY + 5) {
+                return Blocks.BEDROCK.defaultBlockState();
+            } else if (worldY > height - 4) {
+                return getSurfaceBlockForBiome(worldX, worldY, worldZ);
+            } else {
+                return Blocks.STONE.defaultBlockState();
+            }
+        } else if (worldY <= seaLevel) {
+            return Blocks.WATER.defaultBlockState();
+        } else {
+            return Blocks.AIR.defaultBlockState();
+        }
     }
     
-    private double getErosion(int x, int z) {
-        return erosionNoise.getValue(x * 0.0005, 0.0, z * 0.0005);
-    }
-    
-    private double getPeaksValleys(int x, int z) {
-        return peaksValleysNoise.getValue(x * 0.0003, 0.0, z * 0.0003);
-    }
-    
-    private double getWeirdness(int x, int z) {
-        return weirdnessNoise.getValue(x * 0.0008, 0.0, z * 0.0008);
-    }
-    
-    private double calculateTerrainHeight(int x, int z, double continentalness, double erosion, double peaksValleys) {
-        // Combine different noise factors to create varied terrain
+    private double calculateTerrainHeight(int x, int z, double continental, double erosion, double peaksValleys) {
         double baseHeight = seaLevel;
         
-        // Continental variation (-20 to +80 blocks from sea level)
-        baseHeight += continentalness * 50;
+        // Continental variation creates large-scale landmasses
+        baseHeight += continental * 50;
         
-        // Erosion creates valleys and plateaus
+        // Erosion creates realistic valleys and plateaus
         double erosionHeight = (1.0 - Math.abs(erosion)) * 30;
         baseHeight += erosionHeight;
         
-        // Peaks and valleys add local variation
+        // Local peaks and valleys add detailed terrain variation
         baseHeight += peaksValleys * 40;
         
         return Math.max(minY, Math.min(maxY, baseHeight));
     }
     
-    private double calculateDensity(int x, int y, int z, double terrainHeight, double weirdness) {
+    private double calculateDensity3D(int worldX, int worldY, int worldZ, double terrainHeight, double weirdness) {
         // Base density from distance to terrain surface
-        double distanceFromSurface = terrainHeight - y;
-        double baseDensity = distanceFromSurface / 32.0; // Density falls off over 32 blocks
+        double distanceFromSurface = terrainHeight - worldY;
+        double baseDensity = distanceFromSurface / 32.0;
         
-        // Add 3D noise for caves and overhangs
-        double caveValue = caveNoise.getValue(x * 0.02, y * 0.02, z * 0.02);
+        // 3D noise for overhangs, floating islands, and complex structures
+        double noise3D = continentalNoise.getValue(worldX * 0.02, worldY * 0.01, worldZ * 0.02);
+        baseDensity += noise3D * 0.3;
         
-        // Create caves where cave noise is in certain range
-        if (Math.abs(caveValue) < 0.15 && y > minY + 5 && y < terrainHeight - 5) {
-            baseDensity -= 1.0; // Create cave
-        }
-        
-        // Add weirdness for special terrain features
+        // Weirdness creates special terrain features
         if (Math.abs(weirdness) > 0.7) {
-            double weirdnessNoise3D = this.weirdnessNoise.getValue(x * 0.01, y * 0.01, z * 0.01);
+            double weirdnessNoise3D = weirdnessNoise.getValue(worldX * 0.01, worldY * 0.01, worldZ * 0.01);
             baseDensity += weirdnessNoise3D * 0.5;
         }
         
-        // Ensure bedrock at bottom
-        if (y <= minY + 5) {
-            baseDensity += (minY + 5 - y) * 2.0;
+        // Ensure solid bedrock foundation
+        if (worldY <= minY + 5) {
+            baseDensity += (minY + 5 - worldY) * 2.0;
         }
         
         return Math.max(-2.0, Math.min(2.0, baseDensity));
     }
     
-    private BlockState getTerrainBlock(int x, int y, int z, double density) {
+    private BlockState getAdvancedTerrainBlock(int worldX, int worldY, int worldZ, double density, double terrainHeight) {
         // Enhanced terrain block selection based on depth, biome, and local conditions
-        
-        // Get basic block type from depth
-        if (y <= minY + 5) {
+        if (worldY <= minY + 5) {
             return Blocks.BEDROCK.defaultBlockState();
         }
         
-        // Calculate distance from surface for depth-based selection
-        double surfaceDistance = calculateSurfaceDistance(x, y, z);
+        // Calculate surface distance for depth-based selection
+        double surfaceDistance = terrainHeight - worldY;
         
-        // Stone/dirt/grass selection based on surface proximity
-        if (surfaceDistance < -3) {
+        // Get biome for biome-specific blocks
+        BiomeType biome = getBiomeAt(worldX, worldY, worldZ);
+        
+        // Deep stone layers
+        if (surfaceDistance < -10) {
+            return worldY < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
+        }
+        // Subsurface layers
+        else if (surfaceDistance < -3) {
             return Blocks.STONE.defaultBlockState();
-        } else if (surfaceDistance < -1) {
-            return Blocks.DIRT.defaultBlockState();
-        } else if (surfaceDistance <= 0) {
-            if (y > seaLevel) {
-                return Blocks.GRASS_BLOCK.defaultBlockState();
-            } else {
-                return Blocks.DIRT.defaultBlockState();
-            }
+        }
+        // Soil layers
+        else if (surfaceDistance < -1) {
+            return getBiomeSubsurfaceBlock(biome);
+        }
+        // Surface layer
+        else if (surfaceDistance <= 0) {
+            return getBiomeSurfaceBlock(biome, worldY);
         }
         
         return Blocks.AIR.defaultBlockState();
     }
     
-    private double calculateSurfaceDistance(int x, int y, int z) {
-        // Calculate approximate distance to terrain surface using noise
-        double continentalness = getContinentalness(x, z);
-        double erosion = getErosion(x, z);
-        double peaksValleys = getPeaksValleys(x, z);
-        
-        double terrainHeight = calculateTerrainHeight(x, z, continentalness, erosion, peaksValleys);
-        return terrainHeight - y;
-    }
-    
-    private double getTemperature(int x, int z) {
-        return temperatureNoise.getValue(x * 0.0003, 0.0, z * 0.0003);
-    }
-    
-    private double getHumidity(int x, int z) {
-        return humidityNoise.getValue(x * 0.0004, 0.0, z * 0.0004);
-    }
-    
-    private void applyBiomeFeatures(CubeChunk cube, int baseX, int baseY, int baseZ, Registry<Biome> biomeRegistry) {
-        // Implement biome-specific feature generation
-        for (int x = 0; x < CubeChunk.SIZE; x += 4) {
-            for (int z = 0; z < CubeChunk.SIZE; z += 4) {
-                for (int y = 0; y < CubeChunk.SIZE; y += 4) {
-                    int worldX = baseX + x;
-                    int worldY = baseY + y;
-                    int worldZ = baseZ + z;
-                    
-                    // Sample biome at this position
-                    Holder<Biome> biome = getBiomeAt(worldX, worldY, worldZ, biomeRegistry);
-                    
-                    // Apply biome-specific modifications in a 4x4x4 area
-                    applyBiomeFeatureToArea(cube, x, y, z, biome);
-                }
-            }
-        }
-    }
-    
-    private Holder<Biome> getBiomeAt(int x, int y, int z, Registry<Biome> biomeRegistry) {
-        // Simplified 3D biome selection based on temperature, humidity, and height
-        double temperature = getTemperature(x, z);
-        double humidity = getHumidity(x, z);
-        
-        // Height affects biome selection
-        double heightFactor = (y - seaLevel) / 100.0;
-        
-        if (y > seaLevel + 100) {
-            // High altitude - mountains
-            return biomeRegistry.getHolderOrThrow(temperature < 0 ? Biomes.JAGGED_PEAKS : Biomes.STONY_PEAKS);
-        } else if (temperature < -0.5) {
-            // Cold biomes
-            if (humidity > 0.2) {
-                return biomeRegistry.getHolderOrThrow(Biomes.TAIGA);
-            } else {
-                return biomeRegistry.getHolderOrThrow(Biomes.SNOWY_PLAINS);
-            }
-        } else if (temperature > 0.5) {
-            // Hot biomes
-            if (humidity < -0.3) {
-                return biomeRegistry.getHolderOrThrow(Biomes.DESERT);
-            } else {
-                return biomeRegistry.getHolderOrThrow(Biomes.SAVANNA);
-            }
-        } else {
-            // Temperate biomes
-            if (humidity > 0.2) {
-                return biomeRegistry.getHolderOrThrow(Biomes.FOREST);
-            } else {
-                return biomeRegistry.getHolderOrThrow(Biomes.PLAINS);
-            }
-        }
-    }
-    
-    private void applyBiomeFeatureToArea(CubeChunk cube, int startX, int startY, int startZ, Holder<Biome> biome) {
-        // Apply small-scale biome features
-        // This is a simplified implementation - real biome features would be more complex
-        
-        for (int dx = 0; dx < 4 && startX + dx < CubeChunk.SIZE; dx++) {
-            for (int dz = 0; dz < 4 && startZ + dz < CubeChunk.SIZE; dz++) {
-                for (int dy = 0; dy < 4 && startY + dy < CubeChunk.SIZE; dy++) {
-                    int x = startX + dx;
-                    int y = startY + dy;
-                    int z = startZ + dz;
-                    
-                    BlockState currentBlock = cube.getBlockState(x, y, z);
-                    
-                    // Apply biome-specific block changes
-                    if (biome.is(Biomes.DESERT)) {
-                        if (currentBlock.is(Blocks.GRASS_BLOCK)) {
-                            cube.setBlockState(x, y, z, Blocks.SAND.defaultBlockState());
-                        }
-                    } else if (biome.is(Biomes.TAIGA)) {
-                        if (currentBlock.is(Blocks.GRASS_BLOCK) && random.nextFloat() < 0.1f) {
-                            cube.setBlockState(x, y, z, Blocks.PODZOL.defaultBlockState());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private void generateFeatures(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Enhanced feature generation with proper 3D distribution
-        
-        // Cave generation
-        generateCaves(cube, baseX, baseY, baseZ);
-        
-        // Underground structures
-        generateUndergroundStructures(cube, baseX, baseY, baseZ);
-        
-        // Aquifers and water sources
-        generateAquifers(cube, baseX, baseY, baseZ);
-        
-        // Lava lakes in lower regions
-        if (baseY < seaLevel - 32) {
-            generateLavaFeatures(cube, baseX, baseY, baseZ);
-        }
-    }
-    
-    private void generateCaves(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Advanced 3D cave generation using multiple noise layers
-        
+    private void generateAdvancedCaves(CubeChunk cube, int baseX, int baseY, int baseZ) {
+        // Multi-layer cave generation for realistic cave systems
         for (int y = 0; y < CubeChunk.SIZE; y++) {
             for (int z = 0; z < CubeChunk.SIZE; z++) {
                 for (int x = 0; x < CubeChunk.SIZE; x++) {
@@ -353,36 +327,11 @@ public class CubicWorldGenerator {
                     int worldY = baseY + y;
                     int worldZ = baseZ + z;
                     
-                    // Skip if too close to surface or bedrock
-                    if (worldY < minY + 10 || worldY > seaLevel + 20) continue;
-                    
-                    // Multiple cave noise layers for variety
-                    double caveNoise1 = caveNoise.getValue(worldX * 0.02, worldY * 0.02, worldZ * 0.02);
-                    double caveNoise2 = caveNoise.getValue(worldX * 0.05, worldY * 0.05, worldZ * 0.05);
-                    double caveNoise3 = caveNoise.getValue(worldX * 0.01, worldY * 0.01, worldZ * 0.01);
-                    
-                    // Combine noise for complex cave systems
-                    double combinedNoise = (caveNoise1 + caveNoise2 * 0.5 + caveNoise3 * 0.3) / 1.8;
-                    
-                    // Create caves where noise is in specific range
-                    if (Math.abs(combinedNoise) < 0.12) {
+                    if (shouldGenerateCave(worldX, worldY, worldZ)) {
                         BlockState currentBlock = cube.getBlockState(x, y, z);
                         if (!currentBlock.isAir() && currentBlock != Blocks.BEDROCK.defaultBlockState()) {
-                            // Create cave
-                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
-                            
-                            // Add water to caves below sea level
-                            if (worldY <= seaLevel) {
-                                cube.setBlockState(x, y, z, Blocks.WATER.defaultBlockState());
-                            }
-                        }
-                    }
-                    
-                    // Large caverns using different noise
-                    if (Math.abs(caveNoise3) < 0.08 && worldY < seaLevel - 16) {
-                        BlockState currentBlock = cube.getBlockState(x, y, z);
-                        if (!currentBlock.isAir() && currentBlock != Blocks.BEDROCK.defaultBlockState()) {
-                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
+                            BlockState caveBlock = getCaveBlock(worldX, worldY, worldZ);
+                            cube.setBlockState(x, y, z, caveBlock);
                         }
                     }
                 }
@@ -390,134 +339,30 @@ public class CubicWorldGenerator {
         }
     }
     
-    private void generateUndergroundStructures(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Generate underground structures like dungeons and mineshafts
+    private boolean shouldGenerateCave(int worldX, int worldY, int worldZ) {
+        // Skip generation too close to surface or bedrock
+        if (worldY < minY + 10 || worldY > seaLevel + 20) return false;
         
-        Random structureRandom = new Random(seed + (long)baseX * 341873128712L + (long)baseY * 132897987541L + (long)baseZ * 914744123L);
+        // Multiple cave noise layers for complex cave systems
+        double cave1 = caveNoise.getValue(worldX * 0.02, worldY * 0.02, worldZ * 0.02);
+        double cave2 = caveLayerNoise.getValue(worldX * 0.05, worldY * 0.05, worldZ * 0.05);
+        double cave3 = caveChamberNoise.getValue(worldX * 0.01, worldY * 0.01, worldZ * 0.01);
         
-        // Small chance for underground structures
-        if (structureRandom.nextDouble() < 0.001) { // 0.1% chance per cube
-            int structureType = structureRandom.nextInt(3);
-            
-            switch (structureType) {
-                case 0:
-                    generateSmallDungeon(cube, structureRandom);
-                    break;
-                case 1:
-                    generateOreVein(cube, structureRandom);
-                    break;
-                case 2:
-                    generateGeode(cube, structureRandom);
-                    break;
-            }
-        }
-    }
-    
-    private void generateSmallDungeon(CubeChunk cube, Random random) {
-        // Generate a small underground room
-        int centerX = 4 + random.nextInt(8);
-        int centerY = 4 + random.nextInt(8);
-        int centerZ = 4 + random.nextInt(8);
-        int radius = 2 + random.nextInt(3);
+        // Combine noise for varied cave types
+        double combinedNoise = (cave1 + cave2 * 0.5 + cave3 * 0.3) / 1.8;
         
-        for (int y = Math.max(0, centerY - radius); y < Math.min(CubeChunk.SIZE, centerY + radius); y++) {
-            for (int z = Math.max(0, centerZ - radius); z < Math.min(CubeChunk.SIZE, centerZ + radius); z++) {
-                for (int x = Math.max(0, centerX - radius); x < Math.min(CubeChunk.SIZE, centerX + radius); x++) {
-                    double distance = Math.sqrt((x - centerX) * (x - centerX) + 
-                                              (y - centerY) * (y - centerY) + 
-                                              (z - centerZ) * (z - centerZ));
-                    
-                    if (distance <= radius) {
-                        if (distance <= radius - 1) {
-                            // Hollow interior
-                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
-                        } else {
-                            // Walls
-                            cube.setBlockState(x, y, z, Blocks.COBBLESTONE.defaultBlockState());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private void generateOreVein(CubeChunk cube, Random random) {
-        // Generate a concentrated ore vein
-        OreType oreType = OreType.values()[random.nextInt(OreType.values().length)];
-        BlockState oreBlock = getOreBlock(oreType);
+        // Tunnel caves
+        if (Math.abs(combinedNoise) < 0.12) return true;
         
-        int startX = random.nextInt(CubeChunk.SIZE);
-        int startY = random.nextInt(CubeChunk.SIZE);
-        int startZ = random.nextInt(CubeChunk.SIZE);
+        // Large caverns
+        if (Math.abs(cave3) < 0.08 && worldY < seaLevel - 16) return true;
         
-        // Generate a winding vein
-        double dirX = (random.nextDouble() - 0.5) * 2;
-        double dirY = (random.nextDouble() - 0.5) * 2;
-        double dirZ = (random.nextDouble() - 0.5) * 2;
-        
-        double currentX = startX;
-        double currentY = startY;
-        double currentZ = startZ;
-        
-        for (int i = 0; i < 20; i++) {
-            int x = (int) Math.round(currentX);
-            int y = (int) Math.round(currentY);
-            int z = (int) Math.round(currentZ);
-            
-            if (x >= 0 && x < CubeChunk.SIZE && y >= 0 && y < CubeChunk.SIZE && z >= 0 && z < CubeChunk.SIZE) {
-                BlockState currentBlock = cube.getBlockState(x, y, z);
-                if (currentBlock == Blocks.STONE.defaultBlockState()) {
-                    cube.setBlockState(x, y, z, oreBlock);
-                }
-            }
-            
-            // Update direction with some randomness
-            dirX += (random.nextDouble() - 0.5) * 0.5;
-            dirY += (random.nextDouble() - 0.5) * 0.5;
-            dirZ += (random.nextDouble() - 0.5) * 0.5;
-            
-            currentX += dirX;
-            currentY += dirY;
-            currentZ += dirZ;
-        }
-    }
-    
-    private void generateGeode(CubeChunk cube, Random random) {
-        // Generate a geode structure
-        int centerX = 4 + random.nextInt(8);
-        int centerY = 4 + random.nextInt(8);
-        int centerZ = 4 + random.nextInt(8);
-        int radius = 3 + random.nextInt(2);
-        
-        for (int y = Math.max(0, centerY - radius); y < Math.min(CubeChunk.SIZE, centerY + radius); y++) {
-            for (int z = Math.max(0, centerZ - radius); z < Math.min(CubeChunk.SIZE, centerZ + radius); z++) {
-                for (int x = Math.max(0, centerX - radius); x < Math.min(CubeChunk.SIZE, centerX + radius); x++) {
-                    double distance = Math.sqrt((x - centerX) * (x - centerX) + 
-                                              (y - centerY) * (y - centerY) + 
-                                              (z - centerZ) * (z - centerZ));
-                    
-                    if (distance <= radius) {
-                        if (distance <= radius - 2) {
-                            // Hollow interior with crystals
-                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
-                            if (random.nextDouble() < 0.3) {
-                                cube.setBlockState(x, y, z, Blocks.AMETHYST_CLUSTER.defaultBlockState());
-                            }
-                        } else if (distance <= radius - 1) {
-                            // Inner layer
-                            cube.setBlockState(x, y, z, Blocks.AMETHYST_BLOCK.defaultBlockState());
-                        } else {
-                            // Outer shell
-                            cube.setBlockState(x, y, z, Blocks.CALCITE.defaultBlockState());
-                        }
-                    }
-                }
-            }
-        }
+        // Depth-based cave probability
+        double depthFactor = Math.max(0, (seaLevel - worldY) / (double)seaLevel);
+        return Math.abs(cave2) < 0.06 && depthFactor > 0.2;
     }
     
     private void generateAquifers(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Generate underground water sources
         if (baseY > seaLevel + 10) return; // Only in lower regions
         
         for (int y = 0; y < CubeChunk.SIZE; y++) {
@@ -527,11 +372,10 @@ public class CubicWorldGenerator {
                     int worldY = baseY + y;
                     int worldZ = baseZ + z;
                     
-                    // Use humidity noise to determine aquifer locations
+                    double aquiferValue = aquiferNoise.getValue(worldX * 0.01, worldY * 0.01, worldZ * 0.01);
                     double humidityValue = getHumidity(worldX, worldZ);
-                    double aquiferNoise = humidityNoise.getValue(worldX * 0.01, worldY * 0.01, worldZ * 0.01);
                     
-                    if (humidityValue > 0.6 && aquiferNoise > 0.7) {
+                    if (humidityValue > 0.6 && aquiferValue > 0.7) {
                         BlockState currentBlock = cube.getBlockState(x, y, z);
                         if (currentBlock.isAir()) {
                             cube.setBlockState(x, y, z, Blocks.WATER.defaultBlockState());
@@ -543,7 +387,6 @@ public class CubicWorldGenerator {
     }
     
     private void generateLavaFeatures(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Generate lava lakes and pockets in deep areas
         for (int y = 0; y < CubeChunk.SIZE; y++) {
             for (int z = 0; z < CubeChunk.SIZE; z++) {
                 for (int x = 0; x < CubeChunk.SIZE; x++) {
@@ -551,7 +394,6 @@ public class CubicWorldGenerator {
                     int worldY = baseY + y;
                     int worldZ = baseZ + z;
                     
-                    // Only in very deep areas
                     if (worldY > minY + 20) continue;
                     
                     double lavaChance = oreNoise.getValue(worldX * 0.03, worldY * 0.03, worldZ * 0.03);
@@ -567,7 +409,130 @@ public class CubicWorldGenerator {
         }
     }
     
-    private void generateOres(CubeChunk cube, int baseX, int baseY, int baseZ) {
+    private void generateUndergroundStructures(CubeChunk cube, int baseX, int baseY, int baseZ) {
+        Random structureRandom = new Random(seed + (long)baseX * 341873128712L + (long)baseY * 132897987541L + (long)baseZ * 914744123L);
+        
+        if (structureRandom.nextDouble() < 0.001) { // 0.1% chance per cube
+            int structureType = structureRandom.nextInt(4);
+            
+            switch (structureType) {
+                case 0 -> generateDungeon(cube, structureRandom);
+                case 1 -> generateOreVein(cube, structureRandom);
+                case 2 -> generateGeode(cube, structureRandom);
+                case 3 -> generateCrystalCave(cube, structureRandom);
+            }
+        }
+    }
+    
+    private void generateDungeon(CubeChunk cube, Random random) {
+        int centerX = 4 + random.nextInt(8);
+        int centerY = 4 + random.nextInt(8);
+        int centerZ = 4 + random.nextInt(8);
+        int radius = 2 + random.nextInt(3);
+        
+        for (int y = Math.max(0, centerY - radius); y < Math.min(CubeChunk.SIZE, centerY + radius); y++) {
+            for (int z = Math.max(0, centerZ - radius); z < Math.min(CubeChunk.SIZE, centerZ + radius); z++) {
+                for (int x = Math.max(0, centerX - radius); x < Math.min(CubeChunk.SIZE, centerX + radius); x++) {
+                    double distance = Math.sqrt((x - centerX) * (x - centerX) + 
+                                              (y - centerY) * (y - centerY) + 
+                                              (z - centerZ) * (z - centerZ));
+                    
+                    if (distance <= radius) {
+                        if (distance <= radius - 1) {
+                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
+                        } else {
+                            cube.setBlockState(x, y, z, Blocks.COBBLESTONE.defaultBlockState());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void generateOreVein(CubeChunk cube, Random random) {
+        OreType oreType = OreType.values()[random.nextInt(OreType.values().length)];
+        BlockState oreBlock = getOreBlock(oreType);
+        
+        double x = random.nextInt(CubeChunk.SIZE);
+        double y = random.nextInt(CubeChunk.SIZE);
+        double z = random.nextInt(CubeChunk.SIZE);
+        
+        for (int i = 0; i < 20; i++) {
+            int blockX = (int) Math.round(x);
+            int blockY = (int) Math.round(y);
+            int blockZ = (int) Math.round(z);
+            
+            if (blockX >= 0 && blockX < CubeChunk.SIZE && 
+                blockY >= 0 && blockY < CubeChunk.SIZE && 
+                blockZ >= 0 && blockZ < CubeChunk.SIZE) {
+                
+                BlockState currentBlock = cube.getBlockState(blockX, blockY, blockZ);
+                if (currentBlock == Blocks.STONE.defaultBlockState() || 
+                    currentBlock == Blocks.DEEPSLATE.defaultBlockState()) {
+                    cube.setBlockState(blockX, blockY, blockZ, oreBlock);
+                }
+            }
+            
+            x += (random.nextDouble() - 0.5) * 2;
+            y += (random.nextDouble() - 0.5) * 2;
+            z += (random.nextDouble() - 0.5) * 2;
+        }
+    }
+    
+    private void generateGeode(CubeChunk cube, Random random) {
+        int centerX = 4 + random.nextInt(8);
+        int centerY = 4 + random.nextInt(8);
+        int centerZ = 4 + random.nextInt(8);
+        int radius = 3 + random.nextInt(2);
+        
+        for (int y = Math.max(0, centerY - radius); y < Math.min(CubeChunk.SIZE, centerY + radius); y++) {
+            for (int z = Math.max(0, centerZ - radius); z < Math.min(CubeChunk.SIZE, centerZ + radius); z++) {
+                for (int x = Math.max(0, centerX - radius); x < Math.min(CubeChunk.SIZE, centerX + radius); x++) {
+                    double distance = Math.sqrt((x - centerX) * (x - centerX) + 
+                                              (y - centerY) * (y - centerY) + 
+                                              (z - centerZ) * (z - centerZ));
+                    
+                    if (distance <= radius) {
+                        if (distance <= radius - 2) {
+                            cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
+                            if (random.nextDouble() < 0.3) {
+                                cube.setBlockState(x, y, z, Blocks.AMETHYST_CLUSTER.defaultBlockState());
+                            }
+                        } else if (distance <= radius - 1) {
+                            cube.setBlockState(x, y, z, Blocks.AMETHYST_BLOCK.defaultBlockState());
+                        } else {
+                            cube.setBlockState(x, y, z, Blocks.CALCITE.defaultBlockState());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void generateCrystalCave(CubeChunk cube, Random random) {
+        int centerX = random.nextInt(CubeChunk.SIZE);
+        int centerY = random.nextInt(CubeChunk.SIZE);
+        int centerZ = random.nextInt(CubeChunk.SIZE);
+        int size = 4 + random.nextInt(6);
+        
+        for (int x = Math.max(0, centerX - size); x < Math.min(CubeChunk.SIZE, centerX + size); x++) {
+            for (int y = Math.max(0, centerY - size); y < Math.min(CubeChunk.SIZE, centerY + size); y++) {
+                for (int z = Math.max(0, centerZ - size); z < Math.min(CubeChunk.SIZE, centerZ + size); z++) {
+                    double distance = Math.sqrt((x - centerX) * (x - centerX) + 
+                                              (y - centerY) * (y - centerY) + 
+                                              (z - centerZ) * (z - centerZ));
+                    if (distance < size) {
+                        cube.setBlockState(x, y, z, Blocks.AIR.defaultBlockState());
+                        if (random.nextDouble() < 0.2) {
+                            cube.setBlockState(x, y, z, Blocks.GLOWSTONE.defaultBlockState());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void generateAdvancedOres(CubeChunk cube, int baseX, int baseY, int baseZ) {
         for (int x = 0; x < CubeChunk.SIZE; x++) {
             for (int y = 0; y < CubeChunk.SIZE; y++) {
                 for (int z = 0; z < CubeChunk.SIZE; z++) {
@@ -577,7 +542,6 @@ public class CubicWorldGenerator {
                     
                     BlockState currentBlock = cube.getBlockState(x, y, z);
                     
-                    // Only replace stone-like blocks with ores
                     if (currentBlock.is(Blocks.STONE) || currentBlock.is(Blocks.DEEPSLATE)) {
                         BlockState oreBlock = generateOreAt(worldX, worldY, worldZ, currentBlock);
                         if (oreBlock != currentBlock) {
@@ -591,67 +555,172 @@ public class CubicWorldGenerator {
     
     private BlockState generateOreAt(int x, int y, int z, BlockState hostBlock) {
         double oreValue = oreNoise.getValue(x * 0.05, y * 0.05, z * 0.05);
-        
         boolean isDeepslate = hostBlock.is(Blocks.DEEPSLATE);
         
-        // Coal ore - common, higher up
+        // Height-based ore distribution with realistic patterns
         if (y > -32 && y < 128 && oreValue > 0.8) {
             return isDeepslate ? Blocks.DEEPSLATE_COAL_ORE.defaultBlockState() : Blocks.COAL_ORE.defaultBlockState();
         }
-        
-        // Iron ore - medium depth
         if (y > -48 && y < 112 && oreValue > 0.85) {
             return isDeepslate ? Blocks.DEEPSLATE_IRON_ORE.defaultBlockState() : Blocks.IRON_ORE.defaultBlockState();
         }
-        
-        // Gold ore - deeper
         if (y > -64 && y < 32 && oreValue > 0.9) {
             return isDeepslate ? Blocks.DEEPSLATE_GOLD_ORE.defaultBlockState() : Blocks.GOLD_ORE.defaultBlockState();
         }
-        
-        // Diamond ore - very deep and rare
         if (y > -64 && y < 16 && oreValue > 0.95) {
             return isDeepslate ? Blocks.DEEPSLATE_DIAMOND_ORE.defaultBlockState() : Blocks.DIAMOND_ORE.defaultBlockState();
+        }
+        if (y > -64 && y < 32 && oreValue > 0.92) {
+            return isDeepslate ? Blocks.DEEPSLATE_REDSTONE_ORE.defaultBlockState() : Blocks.REDSTONE_ORE.defaultBlockState();
         }
         
         return hostBlock;
     }
     
-    private void initializeLighting(CubeChunk cube, int baseX, int baseY, int baseZ) {
-        // Initialize basic lighting for the chunk
-        for (int x = 0; x < CubeChunk.SIZE; x++) {
-            for (int z = 0; z < CubeChunk.SIZE; z++) {
-                for (int y = CubeChunk.SIZE - 1; y >= 0; y--) {
-                    BlockState block = cube.getBlockState(x, y, z);
+    private void applyBiomeFeatures(CubeChunk cube, int baseX, int baseY, int baseZ) {
+        for (int x = 0; x < CubeChunk.SIZE; x += 4) {
+            for (int z = 0; z < CubeChunk.SIZE; z += 4) {
+                for (int y = 0; y < CubeChunk.SIZE; y += 4) {
+                    int worldX = baseX + x;
+                    int worldY = baseY + y;
+                    int worldZ = baseZ + z;
                     
-                    if (block.isAir()) {
-                        // Set sky light for air blocks
-                        int worldY = baseY + y;
-                        if (worldY > seaLevel + 32) {
-                            cube.setSkyLight(x, y, z, (byte) 15);
-                        } else if (worldY > seaLevel) {
-                            cube.setSkyLight(x, y, z, (byte) Math.max(0, 15 - (seaLevel + 32 - worldY) / 4));
-                        }
-                    } else {
-                        // Set block light for light-emitting blocks
-                        int lightLevel = block.getLightEmission();
-                        if (lightLevel > 0) {
-                            cube.setBlockLight(x, y, z, (byte) lightLevel);
-                        }
-                        break; // Stop sky light propagation downward
+                    BiomeType biome = getBiomeAt(worldX, worldY, worldZ);
+                    applyBiomeFeatureToArea(cube, x, y, z, biome);
+                }
+            }
+        }
+    }
+    
+    private void applyBiomeFeatureToArea(CubeChunk cube, int startX, int startY, int startZ, BiomeType biome) {
+        for (int dx = 0; dx < 4 && startX + dx < CubeChunk.SIZE; dx++) {
+            for (int dz = 0; dz < 4 && startZ + dz < CubeChunk.SIZE; dz++) {
+                for (int dy = 0; dy < 4 && startY + dy < CubeChunk.SIZE; dy++) {
+                    int x = startX + dx;
+                    int y = startY + dy;
+                    int z = startZ + dz;
+                    
+                    BlockState currentBlock = cube.getBlockState(x, y, z);
+                    BlockState biomeBlock = getBiomeSpecificReplacement(biome, currentBlock);
+                    
+                    if (biomeBlock != null) {
+                        cube.setBlockState(x, y, z, biomeBlock);
                     }
                 }
             }
         }
     }
     
-    private Map<OreType, OreConfiguration> createOreConfigurations() {
-        Map<OreType, OreConfiguration> configs = new HashMap<>();
+    private void initializeLighting(CubeChunk cube, int baseX, int baseY, int baseZ) {
+        for (int x = 0; x < CubeChunk.SIZE; x++) {
+            for (int z = 0; z < CubeChunk.SIZE; z++) {
+                for (int y = CubeChunk.SIZE - 1; y >= 0; y--) {
+                    BlockState block = cube.getBlockState(x, y, z);
+                    
+                    if (block.isAir()) {
+                        int worldY = baseY + y;
+                        byte skyLight = calculateSkyLight(worldY);
+                        cube.setSkyLight(x, y, z, skyLight);
+                    } else {
+                        int lightLevel = block.getLightEmission();
+                        if (lightLevel > 0) {
+                            cube.setBlockLight(x, y, z, (byte) lightLevel);
+                        }
+                        break; // Stop sky light propagation
+                    }
+                }
+            }
+        }
+    }
+    
+    // Utility methods for noise sampling
+    public double getContinentalness(int x, int z) {
+        return continentalNoise.getValue(x * 0.0001, 0.0, z * 0.0001);
+    }
+    
+    public double getErosion(int x, int z) {
+        return erosionNoise.getValue(x * 0.0005, 0.0, z * 0.0005);
+    }
+    
+    public double getPeaksValleys(int x, int z) {
+        return peaksValleysNoise.getValue(x * 0.0003, 0.0, z * 0.0003);
+    }
+    
+    public double getWeirdness(int x, int z) {
+        return weirdnessNoise.getValue(x * 0.0008, 0.0, z * 0.0008);
+    }
+    
+    public double getTemperature(int x, int z) {
+        return temperatureNoise.getValue(x * 0.0003, 0.0, z * 0.0003);
+    }
+    
+    public double getHumidity(int x, int z) {
+        return humidityNoise.getValue(x * 0.0004, 0.0, z * 0.0004);
+    }
+    
+    private BiomeType getBiomeAt(int x, int y, int z) {
+        double temperature = getTemperature(x, z);
+        double humidity = getHumidity(x, z);
+        double heightFactor = (y - seaLevel) / 100.0;
         
-        // This would contain proper ore configurations in a real implementation
-        // For now, we use simple noise-based generation in generateOreAt()
-        
-        return configs;
+        if (y > seaLevel + 100) {
+            return temperature < 0 ? BiomeType.SNOWY_PEAKS : BiomeType.STONY_PEAKS;
+        } else if (temperature < -0.5) {
+            return humidity > 0.2 ? BiomeType.TAIGA : BiomeType.SNOWY;
+        } else if (temperature > 0.5) {
+            return humidity < -0.3 ? BiomeType.DESERT : BiomeType.SAVANNA;
+        } else {
+            return humidity > 0.2 ? BiomeType.FOREST : BiomeType.PLAINS;
+        }
+    }
+    
+    private BlockState getSurfaceBlockForBiome(int worldX, int worldY, int worldZ) {
+        BiomeType biome = getBiomeAt(worldX, worldY, worldZ);
+        return getBiomeSurfaceBlock(biome, worldY);
+    }
+    
+    private BlockState getBiomeSurfaceBlock(BiomeType biome, int worldY) {
+        return switch (biome) {
+            case DESERT -> Blocks.SAND.defaultBlockState();
+            case SNOWY, SNOWY_PEAKS -> Blocks.SNOW_BLOCK.defaultBlockState();
+            case TAIGA -> Blocks.PODZOL.defaultBlockState();
+            case STONY_PEAKS -> Blocks.STONE.defaultBlockState();
+            case SAVANNA -> Blocks.COARSE_DIRT.defaultBlockState();
+            default -> worldY > seaLevel ? Blocks.GRASS_BLOCK.defaultBlockState() : Blocks.DIRT.defaultBlockState();
+        };
+    }
+    
+    private BlockState getBiomeSubsurfaceBlock(BiomeType biome) {
+        return switch (biome) {
+            case DESERT -> Blocks.SANDSTONE.defaultBlockState();
+            case SNOWY, SNOWY_PEAKS -> Blocks.DIRT.defaultBlockState();
+            default -> Blocks.DIRT.defaultBlockState();
+        };
+    }
+    
+    private BlockState getCaveBlock(int worldX, int worldY, int worldZ) {
+        return worldY <= seaLevel ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
+    }
+    
+    private BlockState getBiomeSpecificReplacement(BiomeType biome, BlockState currentBlock) {
+        if (currentBlock.is(Blocks.GRASS_BLOCK)) {
+            return switch (biome) {
+                case DESERT -> Blocks.SAND.defaultBlockState();
+                case TAIGA -> random.nextFloat() < 0.1f ? Blocks.PODZOL.defaultBlockState() : null;
+                default -> null;
+            };
+        }
+        return null;
+    }
+    
+    private byte calculateSkyLight(int worldY) {
+        if (worldY > seaLevel + 32) {
+            return 15;
+        } else if (worldY > seaLevel) {
+            return (byte) Math.max(0, 15 - (seaLevel + 32 - worldY) / 4);
+        } else {
+            return 0;
+        }
     }
     
     private BlockState getOreBlock(OreType oreType) {
@@ -667,17 +736,19 @@ public class CubicWorldGenerator {
         };
     }
     
-    /**
-     * Enum representing different types of ores that can be generated.
-     */
+    private Map<OreType, OreConfiguration> createOreConfigurations() {
+        return new HashMap<>(); // Placeholder for future ore configuration system
+    }
+    
+    public void shutdown() {
+        generationExecutor.shutdown();
+    }
+    
+    public enum BiomeType {
+        PLAINS, DESERT, FOREST, SNOWY, TAIGA, SAVANNA, SNOWY_PEAKS, STONY_PEAKS
+    }
+    
     public enum OreType {
-        COAL,
-        IRON,
-        GOLD,
-        DIAMOND,
-        REDSTONE,
-        LAPIS,
-        EMERALD,
-        COPPER
+        COAL, IRON, GOLD, DIAMOND, REDSTONE, LAPIS, EMERALD, COPPER
     }
 } 

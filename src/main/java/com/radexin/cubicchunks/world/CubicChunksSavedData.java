@@ -3,14 +3,14 @@ package com.radexin.cubicchunks.world;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
-import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
+import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.core.HolderLookup;
 
 public class CubicChunksSavedData extends SavedData {
     private CubeWorld cubeWorld;
-    private final UnifiedCubicWorldGenerator generator;
+    private final CubicWorldGenerator generator;
 
-    public CubicChunksSavedData(CubeWorld cubeWorld, UnifiedCubicWorldGenerator generator) {
+    public CubicChunksSavedData(CubeWorld cubeWorld, CubicWorldGenerator generator) {
         this.cubeWorld = cubeWorld;
         this.generator = generator;
     }
@@ -24,7 +24,7 @@ public class CubicChunksSavedData extends SavedData {
         return cubeWorld.toNBT();
     }
 
-    public static CubicChunksSavedData load(CompoundTag tag, HolderLookup.Provider provider, UnifiedCubicWorldGenerator generator) {
+    public static CubicChunksSavedData load(CompoundTag tag, HolderLookup.Provider provider, CubicWorldGenerator generator) {
         // Get biome registry from provider
         var biomeRegistryLookup = provider.lookupOrThrow(net.minecraft.core.registries.Registries.BIOME);
         // Convert to Registry if needed - for now use null as fallback since Registry interface changed
@@ -33,7 +33,7 @@ public class CubicChunksSavedData extends SavedData {
         return new CubicChunksSavedData(world, generator);
     }
 
-    public static SavedData.Factory<CubicChunksSavedData> factory(UnifiedCubicWorldGenerator generator) {
+    public static SavedData.Factory<CubicChunksSavedData> factory(CubicWorldGenerator generator) {
         return new SavedData.Factory<>(
             () -> {
                 // Create a minimal CubeWorld for saved data
@@ -45,7 +45,7 @@ public class CubicChunksSavedData extends SavedData {
         );
     }
 
-    public static CubicChunksSavedData getOrCreate(MinecraftServer server, UnifiedCubicWorldGenerator generator) {
+    public static CubicChunksSavedData getOrCreate(MinecraftServer server, CubicWorldGenerator generator) {
         return server.overworld().getDataStorage().computeIfAbsent(
             CubicChunksSavedData.factory(generator),
             "cubicchunks"

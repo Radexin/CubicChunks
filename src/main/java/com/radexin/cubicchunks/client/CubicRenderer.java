@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Unified high-performance cubic chunk renderer combining detailed block rendering,
  * LOD system, frustum culling, batching, and advanced performance optimizations.
  */
-public class UnifiedCubicRenderer {
+public class CubicRenderer {
     // LOD Configuration
     private static final int MAX_LOD_LEVEL = 4;
     private static final float[] LOD_DISTANCES = {32f, 64f, 128f, 256f, 512f};
@@ -64,7 +64,7 @@ public class UnifiedCubicRenderer {
     private boolean enableDetailedRendering = true;
     private boolean enableOcclusionCulling = true;
     
-    public UnifiedCubicRenderer() {
+    public CubicRenderer() {
         this.minecraft = Minecraft.getInstance();
         this.blockRenderer = minecraft.getBlockRenderer();
         initializeLODMeshes();

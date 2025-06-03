@@ -42,7 +42,7 @@ import java.util.function.Predicate;
  */
 public class CubicEntityManager {
     private final ServerLevel level;
-    private final UnifiedCubicChunkManager chunkManager;
+    private final CubicChunkManager chunkManager;
     
     // Entity tracking by cube
     private final Map<Long, Set<Entity>> entitiesBycube = new ConcurrentHashMap<>();
@@ -65,7 +65,7 @@ public class CubicEntityManager {
     private final Map<Entity, Long> entityLastUpdate = new ConcurrentHashMap<>();
     private static final long ENTITY_TIMEOUT = 30000; // 30 seconds
     
-    public CubicEntityManager(ServerLevel level, UnifiedCubicChunkManager chunkManager) {
+    public CubicEntityManager(ServerLevel level, CubicChunkManager chunkManager) {
         this.level = level;
         this.chunkManager = chunkManager;
     }

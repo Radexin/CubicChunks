@@ -11,7 +11,7 @@ import net.minecraft.core.registries.Registries;
 
 public class CubicChunkProvider {
     private final CubicChunkMap chunkMap = new CubicChunkMap();
-    private UnifiedCubicChunkStorage storage;
+    private CubicChunkStorage storage;
     private CubicEntityManager entityManager;
     private final Level level;
 
@@ -19,14 +19,14 @@ public class CubicChunkProvider {
         this.level = level;
         // Get biome registry from level
         Registry<Biome> biomeRegistry = level.registryAccess().registryOrThrow(Registries.BIOME);
-        this.storage = new UnifiedCubicChunkStorage(worldDir, biomeRegistry);
+        this.storage = new CubicChunkStorage(worldDir, biomeRegistry);
         
         // Create entity manager with a simple chunk provider interface
         this.entityManager = new CubicEntityManager((ServerLevel) level, new SimpleCubicChunkManager());
     }
 
     // Simple chunk manager implementation for entity manager
-    private class SimpleCubicChunkManager extends UnifiedCubicChunkManager {
+    private class SimpleCubicChunkManager extends CubicChunkManager {
         public SimpleCubicChunkManager() {
             // Create with minimal dependencies - just need the getCube method for entity manager
             super(null, null, null, null); // We'll override getCube method

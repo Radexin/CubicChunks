@@ -8,7 +8,7 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import com.radexin.cubicchunks.world.CubeWorld;
-import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
+import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.chunk.CubeColumn;
 import net.minecraft.client.Minecraft;
@@ -17,20 +17,20 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.minecraft.world.phys.Vec3;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.radexin.cubicchunks.client.UnifiedCubicRenderer;
+import com.radexin.cubicchunks.client.CubicRenderer;
 
 import java.util.Collection;
 
 public class CubicChunksClient {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static CubeWorld clientCubeWorld;
-    private static UnifiedCubicRenderer cubeRenderer;
+    private static CubicRenderer cubeRenderer;
 
     public static CubeWorld getClientCubeWorld() {
         return clientCubeWorld;
     }
 
-    public static UnifiedCubicRenderer getCubeRenderer() {
+    public static CubicRenderer getCubeRenderer() {
         return cubeRenderer;
     }
 
@@ -38,12 +38,12 @@ public class CubicChunksClient {
     public static void onClientSetup(FMLClientSetupEvent event) {
         LOGGER.info("CubicChunks client setup: Initializing cubic chunks client systems");
         
-        // Initialize client CubeWorld with UnifiedCubicWorldGenerator
-        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(null, null, null);
+        // Initialize client CubeWorld with CubicWorldGenerator
+        CubicWorldGenerator generator = new CubicWorldGenerator(null, null, null);
         clientCubeWorld = new CubeWorld(generator, null, null);
         
         // Initialize cube renderer
-        cubeRenderer = new UnifiedCubicRenderer();
+        cubeRenderer = new CubicRenderer();
         
         // Register client events
         NeoForge.EVENT_BUS.register(CubicChunksClient.class);
@@ -55,7 +55,7 @@ public class CubicChunksClient {
     public static void onPlayerJoin(ClientPlayerNetworkEvent.LoggingIn event) {
         LOGGER.info("Player joining - resetting client cube world");
         // Reset cube world when joining a server
-        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(null, null, null);
+        CubicWorldGenerator generator = new CubicWorldGenerator(null, null, null);
         clientCubeWorld = new CubeWorld(generator, null, null);
         if (cubeRenderer != null) {
             cubeRenderer.clearCache();

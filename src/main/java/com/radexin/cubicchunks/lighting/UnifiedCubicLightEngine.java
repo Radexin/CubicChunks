@@ -2,7 +2,7 @@ package com.radexin.cubicchunks.lighting;
 
 import com.radexin.cubicchunks.Config;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.chunk.UnifiedCubicChunkManager;
+import com.radexin.cubicchunks.chunk.CubicChunkManager;
 import com.radexin.cubicchunks.world.CubeWorld;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -27,7 +27,7 @@ public class UnifiedCubicLightEngine {
     private static final long CACHE_EXPIRE_TIME = 5000; // 5 seconds
     
     // Core components
-    private final UnifiedCubicChunkManager chunkManager;
+    private final CubicChunkManager chunkManager;
     private final CubeWorld cubeWorld;
     private final Level level;
     
@@ -59,7 +59,7 @@ public class UnifiedCubicLightEngine {
     private final int cacheSize = Config.lightCacheSize;
     private final boolean enableSpatialOptimization = true;
     
-    public UnifiedCubicLightEngine(UnifiedCubicChunkManager chunkManager, CubeWorld cubeWorld, Level level) {
+    public UnifiedCubicLightEngine(CubicChunkManager chunkManager, CubeWorld cubeWorld, Level level) {
         this.chunkManager = chunkManager;
         this.cubeWorld = cubeWorld;
         this.level = level;

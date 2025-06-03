@@ -2,7 +2,7 @@ package com.radexin.cubicchunks.mixin;
 
 import com.radexin.cubicchunks.world.CubeWorld;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
+import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -34,7 +34,7 @@ public abstract class ServerLevelMixin {
     private void cubicchunks$initCubeWorld(CallbackInfo ci) {
         ServerLevel level = (ServerLevel)(Object)this;
         var biomeRegistry = level.registryAccess().registry(net.minecraft.core.registries.Registries.BIOME).get();
-        UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
+        CubicWorldGenerator generator = new CubicWorldGenerator(level, biomeRegistry, null);
         // For now we'll create a simple CubeWorld - this should be properly integrated with UnifiedCubicChunkManager later
         this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
     }

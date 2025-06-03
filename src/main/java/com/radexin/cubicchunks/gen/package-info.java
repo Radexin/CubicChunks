@@ -1,4 +1,4 @@
 /**
- * Contains world generation logic for cubic chunks (UnifiedCubicWorldGenerator).
+ * Contains world generation logic for cubic chunks (CubicWorldGenerator).
  */
 package com.radexin.cubicchunks.gen; 

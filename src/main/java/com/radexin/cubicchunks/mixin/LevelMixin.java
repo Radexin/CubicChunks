@@ -2,7 +2,7 @@ package com.radexin.cubicchunks.mixin;
 
 import com.radexin.cubicchunks.world.CubeWorld;
 import com.radexin.cubicchunks.chunk.CubeChunk;
-import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
+import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
@@ -36,11 +36,11 @@ public abstract class LevelMixin {
         // Only initialize for server levels and client levels that support cubic chunks
         if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             var biomeRegistry = serverLevel.registryAccess().registry(net.minecraft.core.registries.Registries.BIOME).get();
-            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, biomeRegistry, null);
+            CubicWorldGenerator generator = new CubicWorldGenerator(level, biomeRegistry, null);
             this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
         } else if (level instanceof net.minecraft.client.multiplayer.ClientLevel) {
             // For client levels, create a simpler version without server dependencies
-            UnifiedCubicWorldGenerator generator = new UnifiedCubicWorldGenerator(level, null, null);
+            CubicWorldGenerator generator = new CubicWorldGenerator(level, null, null);
             this.cubicchunks$cubeWorld = new CubeWorld(generator, null, level);
         }
     }
