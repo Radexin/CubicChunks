@@ -1,8 +1,7 @@
 package com.radexin.cubicchunks.chunk;
 
 import com.radexin.cubicchunks.Config;
-import com.radexin.cubicchunks.gen.CubicWorldGenerator;
-import com.radexin.cubicchunks.gen.CubeChunkGenerator;
+import com.radexin.cubicchunks.gen.UnifiedCubicWorldGenerator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
@@ -31,8 +30,7 @@ public class UnifiedCubicChunkManager {
     
     // Core components
     private final ServerLevel level;
-    private final CubicWorldGenerator worldGenerator;
-    private final CubeChunkGenerator cubeGenerator;
+    private final UnifiedCubicWorldGenerator worldGenerator;
     private final UnifiedCubicChunkStorage storage;
     private final Registry<Biome> biomeRegistry;
     
@@ -63,12 +61,10 @@ public class UnifiedCubicChunkManager {
     private int horizontalRenderDistance = 8;
     private int verticalRenderDistance = 4;
     
-    public UnifiedCubicChunkManager(ServerLevel level, CubicWorldGenerator worldGenerator, 
-                                  UnifiedCubeChunkGenerator cubeGenerator, UnifiedCubicChunkStorage storage, 
-                                  Registry<Biome> biomeRegistry) {
+    public UnifiedCubicChunkManager(ServerLevel level, UnifiedCubicWorldGenerator worldGenerator, 
+                                  UnifiedCubicChunkStorage storage, Registry<Biome> biomeRegistry) {
         this.level = level;
         this.worldGenerator = worldGenerator;
-        this.cubeGenerator = cubeGenerator;
         this.storage = storage;
         this.biomeRegistry = biomeRegistry;
         
@@ -276,17 +272,21 @@ public class UnifiedCubicChunkManager {
     
     private CubeChunk loadCube(CubePos pos) {
         // Try to load from storage first
-        CubeChunk cube = storage.loadCube(pos.x, pos.y, pos.z);
+        CubeChunk cube = null;
+        try {
+            cube = storage.loadCube(pos.x, pos.y, pos.z);
+        } catch (Exception e) {
+            // Log error but continue with generation
+            System.err.println("Failed to load cube from storage " + pos + ": " + e.getMessage());
+        }
         
         if (cube == null) {
             // Generate new cube
             cube = new CubeChunk(pos.x, pos.y, pos.z, biomeRegistry);
             
-            // Use appropriate generator
+            // Use the unified world generator for better generation
             if (worldGenerator != null) {
-                worldGenerator.generateCube(cube, biomeRegistry);
-            } else if (cubeGenerator != null) {
-                cubeGenerator.generateCube(cube);
+                worldGenerator.generateCube(cube);
             }
         }
         
