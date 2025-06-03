@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Combines advanced algorithms, efficient caching, multi-threaded processing,
  * and cross-cube light propagation from multiple implementations.
  */
-public class UnifiedCubicLightEngine {
+public class CubicLightEngine {
     private static final int MAX_LIGHT_LEVEL = 15;
     private static final int LIGHT_PROPAGATION_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
     private static final int MAX_PROPAGATION_DISTANCE = 16;
@@ -59,7 +59,7 @@ public class UnifiedCubicLightEngine {
     private final int cacheSize = Config.lightCacheSize;
     private final boolean enableSpatialOptimization = true;
     
-    public UnifiedCubicLightEngine(CubicChunkManager chunkManager, CubeWorld cubeWorld, Level level) {
+    public CubicLightEngine(CubicChunkManager chunkManager, CubeWorld cubeWorld, Level level) {
         this.chunkManager = chunkManager;
         this.cubeWorld = cubeWorld;
         this.level = level;

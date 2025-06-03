@@ -3,7 +3,7 @@ package com.radexin.cubicchunks.world;
 import com.radexin.cubicchunks.chunk.CubeColumn;
 import com.radexin.cubicchunks.chunk.CubeChunk;
 import com.radexin.cubicchunks.chunk.CubicChunkManager;
-import com.radexin.cubicchunks.lighting.UnifiedCubicLightEngine;
+import com.radexin.cubicchunks.lighting.CubicLightEngine;
 import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.BlockPos;
@@ -26,12 +26,12 @@ public class CubeWorld {
     // Map of (x, z) to CubeColumn
     private final Map<Long, CubeColumn> columns = new HashMap<>();
     private final CubicWorldGenerator generator;
-    private final UnifiedCubicLightEngine lightEngine;
+    private final CubicLightEngine lightEngine;
     private final Set<CubeChunk> tickingCubes = new HashSet<>();
 
     public CubeWorld(CubicWorldGenerator generator, CubicChunkManager chunkManager, Level level) {
         this.generator = generator;
-        this.lightEngine = new UnifiedCubicLightEngine(chunkManager, this, level);
+        this.lightEngine = new CubicLightEngine(chunkManager, this, level);
     }
 
     /**
@@ -257,7 +257,7 @@ public class CubeWorld {
     /**
      * Gets the lighting engine
      */
-    public UnifiedCubicLightEngine getLightEngine() {
+    public CubicLightEngine getLightEngine() {
         return lightEngine;
     }
 } 
