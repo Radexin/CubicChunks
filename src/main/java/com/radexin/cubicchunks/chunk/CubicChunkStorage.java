@@ -3,19 +3,14 @@ package com.radexin.cubicchunks.chunk;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Unified high-performance storage system for cubic chunks.

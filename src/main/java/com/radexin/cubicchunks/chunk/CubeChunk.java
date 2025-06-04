@@ -3,8 +3,6 @@ package com.radexin.cubicchunks.chunk;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.entity.EntityTypeTest;

@@ -4,8 +4,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.core.Registry;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.server.level.ServerLevel;
 
 import java.io.*;
 import java.util.HashMap;

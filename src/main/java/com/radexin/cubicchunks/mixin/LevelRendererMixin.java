@@ -18,10 +18,8 @@ import net.minecraft.client.Camera;
 import java.util.Set;
 import java.util.HashSet;
 import com.radexin.cubicchunks.client.CubicRenderer;
-import com.radexin.cubicchunks.world.CubicWorldType;
 import net.minecraft.client.Minecraft;
 import com.mojang.blaze3d.vertex.PoseStack;
-import org.joml.Matrix4f;
 
 import java.util.Collection;
 import com.radexin.cubicchunks.chunk.CubicChunkManager;

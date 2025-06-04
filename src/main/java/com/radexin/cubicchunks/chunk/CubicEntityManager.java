@@ -1,30 +1,19 @@
 package com.radexin.cubicchunks.chunk;
 
-import com.radexin.cubicchunks.Config;
-import com.radexin.cubicchunks.world.CubeWorld;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.Level;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.SpawnPlacements;
-import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.NaturalSpawner;
 import net.minecraft.world.level.biome.MobSpawnSettings;
-import net.minecraft.world.level.entity.EntityTypeTest;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.SpawnGroupData;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -34,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Predicate;
 
 /**
  * Manages entity tracking, spawning, and storage for cubic chunks.

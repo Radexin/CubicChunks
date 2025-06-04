@@ -9,7 +9,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.core.Registry;
 import net.minecraft.world.level.biome.Biome;
-import net.minecraft.core.registries.Registries;
 
 /**
  * Represents a column of CubeChunks at a given X/Z coordinate.

@@ -4,7 +4,6 @@ import com.radexin.cubicchunks.Config;
 import com.radexin.cubicchunks.gen.CubicWorldGenerator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
