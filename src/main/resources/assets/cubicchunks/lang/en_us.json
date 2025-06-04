@@ -1,7 +1,4 @@
 {
-  "itemGroup.cubicchunks": "Cubic Chunks",
-  "block.cubicchunks.example_block": "Example Block",
-  "item.cubicchunks.example_item": "Example Item",
   "cubicchunks.options.verticalRenderDistance": "Vertical Render Distance",
   "cubicchunks.options.verticalRenderDistance.tooltip": "Controls how many cubic chunks are rendered above and below the player"
 }
